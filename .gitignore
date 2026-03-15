@@ -1,0 +1,17 @@
+# 数据目录（图片通过腾讯云 COS 加载）
+data/
+
+# 密钥文件
+.env
+js/config.js
+
+# 系统文件
+.DS_Store
+
+# 依赖
+node_modules/
+
+# Playwright MCP 缓存
+.playwright-mcp/
+
+.CLAUDE.md

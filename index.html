@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PhotoSpot PKU — 北京大学摄影点位地图</title>
+    <meta name="description" content="探索北京大学最佳摄影点位，发现未名湖、博雅塔、西门等经典拍摄机位。">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <!-- Mapbox GL JS -->
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
+
+    <!-- App Styles -->
+    <link rel="stylesheet" href="css/style.css?v=3">
+</head>
+
+<body>
+    <!-- Map Container -->
+    <div id="map"></div>
+
+    <!-- Map Overlay (for mobile drawer dimming) -->
+    <div id="map-overlay" class="map-overlay"></div>
+
+    <!-- Map Style Switcher -->
+    <div id="style-switcher">
+        <button class="style-btn active" data-style="dark" title="暗色地图">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+            <span>暗色</span>
+        </button>
+        <button class="style-btn" data-style="streets" title="街道地图">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 6l9-4 9 4v12l-9 4-9-4V6z" />
+                <path d="M12 2v20" />
+                <path d="M3 6l9 4" />
+                <path d="M21 6l-9 4" />
+            </svg>
+            <span>街道</span>
+        </button>
+        <button class="style-btn" data-style="satellite" title="卫星地图">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M2 12h20" />
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
+            <span>卫星</span>
+        </button>
+    </div>
+
+    <!-- Sidebar / Bottom Drawer Panel -->
+    <div id="panel">
+        <div id="panel-handle" class="panel-handle">
+            <div class="handle-bar"></div>
+        </div>
+
+        <!-- Header -->
+        <div id="panel-header">
+            <div class="panel-title-row">
+                <h1 id="panel-title">
+                    <span class="title-icon">📷</span>
+                    PhotoSpot PKU
+                </h1>
+                <span class="subtitle">北京大学摄影点位地图</span>
+            </div>
+            <button id="back-btn" class="back-btn hidden" title="返回">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M19 12H5" />
+                    <path d="M12 19l-7-7 7-7" />
+                </svg>
+                <span>全部区域</span>
+            </button>
+        </div>
+
+        <!-- Content: Area List (Level 1) -->
+        <div id="area-list" class="panel-content">
+            <div class="section-label">
+                <span class="section-icon">🗺️</span>
+                校园摄影区域
+            </div>
+            <div id="areas-container"></div>
+        </div>
+
+        <!-- Content: Spot Detail (Level 2) -->
+        <div id="spot-detail" class="panel-content hidden">
+            <div id="area-info" class="area-info-card"></div>
+            <div class="section-label">
+                <span class="section-icon">📍</span>
+                拍摄机位
+            </div>
+            <div id="spots-container"></div>
+        </div>
+
+        <!-- Content: Spot Photo Detail (Level 3) -->
+        <div id="spot-photo-detail" class="panel-content hidden">
+            <div id="spot-photo-header" class="spot-photo-header-card"></div>
+            <div class="section-label">
+                <span class="section-icon">🖼️</span>
+                示例照片
+            </div>
+            <div id="spot-photo-gallery"></div>
+        </div>
+    </div>
+
+    <!-- Photo Lightbox -->
+    <div id="lightbox" class="lightbox">
+        <button id="lightbox-close" class="lightbox-close" aria-label="关闭">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 6L6 18" />
+                <path d="M6 6l12 12" />
+            </svg>
+        </button>
+        <img id="lightbox-img" class="lightbox-img" src="" alt="照片预览" />
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay">
+        <div class="loading-spinner">
+            <div class="spinner-ring"></div>
+            <p>加载地图中...</p>
+        </div>
+    </div>
+
+    <!-- Config (Mapbox Token) -->
+    <script src="js/config.js"></script>
+    <!-- Main Script -->
+    <script src="js/app.js?v=3"></script>
+</body>
+
+</html>

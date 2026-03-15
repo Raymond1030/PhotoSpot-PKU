@@ -1,0 +1,19 @@
+{
+  "name": "photospot-pku-web",
+  "version": "1.0.0",
+  "description": "> **北京大学摄影点位地图** — 探索北大校园最佳拍摄机位的交互式 Web 地图应用。",
+  "main": "index.js",
+  "scripts": {
+    "sync-photos": "node scripts/generate_manifest.js",
+    "gen-config": "node scripts/generate_config.js",
+    "dev": "npm run gen-config && npm run sync-photos && live-server --port=3000 --no-browser",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "exifreader": "^4.36.2",
+    "live-server": "^1.2.2"
+  }
+}
