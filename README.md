@@ -1,88 +1,76 @@
-# PhotoSpot PKU
+<p align="center">
+  <img src="assets/pku-logo.png" alt="北京大学校徽" width="120">
+</p>
+<h1 align="center">PhotoSpot PKU📷</h1>
 
-北京大学摄影点位地图 — 一个交互式 Web 地图应用，帮助你探索北大校园的最佳拍摄机位。
+<p align="center">
+  <strong>北京大学摄影点位地图</strong><br>
+  探索燕园
+</p>
+---
 
-## 功能
+PhotoSpot PKU 是一张为摄影爱好者打造的**北大校园交互地图**
 
-- **三级导航** — 摄影区域 → 拍摄机位 → 示例照片 + EXIF 参数
-- **地图交互** — 基于 Mapbox GL JS，支持缩放、飞行动画、点击选点
-- **底图切换** — 暗色 / 街道 / 卫星三种样式
-- **照片预览** — Lightbox 全屏查看，叠加相机型号、焦距、光圈等 EXIF 信息
-- **响应式** — 桌面侧边栏 + 移动端底部抽屉，支持手势拖拽
-- **推荐标记** — 关键摄影区域与机位优先展示
+我们以地图为媒，串联起燕园的每一处诗意光影，助你定格心中最美的北大。
+
+从古朴庄严的西门，到波光潋滟的未名湖，再到巍然耸立的博雅塔——
+每一个经典机位，我们都为你精确定位；每一张样片，都附上完整的拍摄参数，让你轻松复刻大片。
+
+无论你是初来乍到、想探索未知北大的新生，还是追寻光影的摄影发烧友，       
+希望PhotoSpot能成为你镜头下最美的向导。      
+
+🎞️ 来这里，发现燕园的另一种方式。
+用镜头，收藏北大的四季。            
+
+## 你可以用它做什么
+
+- **浏览摄影区域** — 西门、未名湖、博雅塔……按区域探索校园中的拍摄热点
+- **定位拍摄机位** — 每个区域下有具体的站位推荐，点击即可在地图上飞行定位
+- **查看示例照片** — 浏览该机位的实拍样片，全屏查看细节
+- **参考拍摄参数** — 每张照片叠加显示相机型号、焦距、光圈、快门速度等 EXIF 信息，方便你复刻同款
+- **切换底图样式** — 暗色、街道、卫星三种地图风格，适应不同使用场景
+- **手机也能用** — 响应式设计，手机端以底部抽屉形式浏览，支持手势拖拽
 
 ## 快速开始
 
 ```bash
-# 1. 克隆并进入项目
-git clone https://github.com/Raymond1030/PhotoSpot-PKU-Web.git
+# 克隆项目
+git clone https://github.com/Raymond1030/PhotoSpot-PKU.git
 cd PhotoSpot-PKU-Web
 
-# 2. 配置 Mapbox Token
+# 配置 Mapbox Token
 cp .env.example .env
-# 编辑 .env，填入你的 Token（申请地址：https://account.mapbox.com/access-tokens/）
+# 编辑 .env，填入你的 Mapbox Token
+# 免费申请：https://account.mapbox.com/access-tokens/
 
-# 3. 安装依赖并启动
+# 安装依赖并启动
 npm install
 npm run dev
 ```
 
-打开 `http://localhost:3000` 即可访问。
+打开浏览器访问 `http://localhost:3000` 即可本地使用。
 
-> 由于使用 `fetch` 加载数据，不能直接打开 `index.html`，需通过 HTTP 服务器访问。
+> **注意：** 不能直接双击打开 `index.html`，需要通过上述命令启动本地服务器。
 
-## 项目结构
+## 关于数据
 
-```
-├── index.html                 # 页面入口
-├── css/style.css              # 样式（响应式 + 暗色主题 + CSS 变量）
-├── js/
-│   ├── app.js                 # 应用主逻辑（地图、面板、图片轮播、手势）
-│   └── config.js              # 从 .env 自动生成（已 gitignore）
-├── data/
-│   ├── spot_data/             # GeoJSON 点位数据
-│   ├── images/                # 照片（按 区域/机位 目录组织）
-│   ├── image_manifest.json    # 图片路径清单（自动生成）
-│   └── image_metadata.json    # EXIF 元数据（自动生成）
-├── scripts/
-│   ├── generate_config.js     # .env → js/config.js
-│   └── generate_manifest.js   # 扫描 images/ 生成清单与 EXIF
-├── .env.example               # 环境变量模板
-└── package.json
-```
+目前收录了 **19 个摄影区域**（一级点位）和 **42 个具体机位**（二级点位），覆盖燕园主要景观与建筑。
 
-## 开发命令
+> **注：** 点位数据与照片暂未开源，将在适当时候公开发布。目前正在努力增加点位，正在苦逼的使用QGIS手动标注ing😭😭😭
 
+## 参与贡献
 
-| 命令                    | 说明                                       |
-| --------------------- | ---------------------------------------- |
-| `npm run dev`         | 生成配置 → 生成图片清单 → 启动 live-server (端口 3000) |
-| `npm run sync-photos` | 仅重新扫描 `data/images/` 生成清单和 EXIF          |
-| `npm run gen-config`  | 仅从 `.env` 重新生成 `js/config.js`            |
+欢迎通过 [Issues](https://github.com/Raymond1030/PhotoSpot-PKU/issues) 提出建议或反馈：
 
+1. **贡献点位与照片** — 如果你有推荐的拍摄位置或照片，欢迎提 Issue 说明，照片也可以发送邮件到 raymondlo@stu.pku.edu.cn **（急需！！！）**
+2. **功能建议** — 希望增加什么功能？告诉我们
+3. **地图可视化意见** — 对地图样式、图层、交互有改进想法，欢迎反馈
 
-## 技术栈
+## TODO
 
-- **前端**：HTML / CSS / JavaScript（纯静态，无框架、无构建）
-- **地图**：Mapbox GL JS v3.3（原生图层渲染，非 DOM 标记）
-- **数据**：GeoJSON
-- **图片**：腾讯云 COS 托管
-- **EXIF**：ExifReader
-
-## 数据格式
-
-点位数据为 GeoJSON FeatureCollection，分两级：
-
-**PKU_Area（摄影区域）**：`id` / `Area_Name` / `Des` / `Key_Area`
-
-**PKU_Spot（拍摄机位）**：`Spot_id` / `Area_id` / `Spot_Name` / `Des` / `Key_Spot`
-
-## 部署
-
-可部署到 GitHub Pages、Vercel、Netlify 等静态托管平台。
-
-1. 在部署环境中配置 `.env`（或手动创建 `js/config.js`）
-2. 在 [Mapbox 后台](https://account.mapbox.com/access-tokens/) 为 Token 设置 URL 限制，仅允许部署域名使用
+- 彩绘地图的底图
+- 点位增加
+- 风光照和人像的区分
 
 ## License
 
