@@ -846,21 +846,52 @@ function isMobile() {
     return window.innerWidth <= 768;
 }
 
+// Solid fallback color used while backdrop-filter is off during animations
+const PANEL_BG_SOLID = 'rgb(15, 25, 35)';
+
 function showDrawer() {
     if (!isMobile()) return;
+    // 1. Prepare off-screen: set height, swap to solid bg + no blur for smooth animation
+    panel.style.transition = 'none';
+    panel.style.height = '60vh';
+    panel.style.background = PANEL_BG_SOLID;
+    panel.style.backdropFilter = 'none';
+    panel.style.webkitBackdropFilter = 'none';
+    panel.classList.remove('drawer-collapsed', 'drawer-expanded');
+    // 2. Force layout
+    panel.offsetHeight;
+    // 3. Animate transform only
+    panel.style.transition = '';
     panel.classList.remove('drawer-hidden');
     document.body.classList.remove('drawer-is-hidden');
-    // Show at 3/5 of screen height (60vh)
-    panel.style.height = '60vh';
-    panel.classList.remove('drawer-collapsed', 'drawer-expanded');
-    panel.classList.add('drawer-expanded');
+    // 4. Restore blur + transparent bg after animation
+    panel.addEventListener('transitionend', function onEnd(e) {
+        if (e.propertyName !== 'transform') return;
+        panel.removeEventListener('transitionend', onEnd);
+        panel.style.background = '';
+        panel.style.backdropFilter = '';
+        panel.style.webkitBackdropFilter = '';
+    });
 }
 
 function hideDrawer() {
     if (!isMobile()) return;
+    // Swap to solid bg + disable blur during slide-out
+    panel.style.background = PANEL_BG_SOLID;
+    panel.style.backdropFilter = 'none';
+    panel.style.webkitBackdropFilter = 'none';
     panel.classList.add('drawer-hidden');
     document.body.classList.add('drawer-is-hidden');
     panel.classList.remove('drawer-collapsed', 'drawer-expanded');
+    // Clean up after animation
+    panel.addEventListener('transitionend', function onEnd(e) {
+        if (e.propertyName !== 'transform') return;
+        panel.removeEventListener('transitionend', onEnd);
+        panel.style.background = '';
+        panel.style.backdropFilter = '';
+        panel.style.webkitBackdropFilter = '';
+        panel.style.height = '';
+    });
 }
 
 // Start hidden on mobile

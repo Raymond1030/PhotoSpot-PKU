@@ -130,8 +130,8 @@ body {
     overflow: hidden;
     transition: top var(--transition-normal), left var(--transition-normal),
                 right var(--transition-normal), bottom var(--transition-normal),
-                width var(--transition-normal), height var(--transition-normal),
-                border-radius var(--transition-normal), transform var(--transition-normal);
+                width var(--transition-normal), border-radius var(--transition-normal),
+                transform var(--transition-normal);
 }
 
 .panel-handle {
@@ -1115,8 +1115,8 @@ body {
         max-height: 85vh;
         border-radius: var(--radius-xl) var(--radius-xl) 0 0;
         padding-bottom: env(safe-area-inset-bottom, 0px);
-        transition: height var(--transition-normal), transform var(--transition-normal);
-        will-change: height;
+        transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        will-change: transform;
     }
 
     /* ── Drag Handle ── */
@@ -1324,6 +1324,8 @@ body {
     #panel.drawer-hidden {
         transform: translateY(100%);
         pointer-events: none;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
     }
 
     #panel.drawer-hidden ~ .mapboxgl-ctrl-bottom-right,
