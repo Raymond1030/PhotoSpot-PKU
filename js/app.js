@@ -75,6 +75,15 @@ const map = new mapboxgl.Map({
 });
 
 map.addControl(new mapboxgl.NavigationControl({ showCompass: true, showZoom: true }), 'top-right');
+
+// ── Geolocate Control ──
+const geolocateControl = new mapboxgl.GeolocateControl({
+    positionOptions: { enableHighAccuracy: true },
+    trackUserLocation: true,
+    showUserHeading: true
+});
+map.addControl(geolocateControl, 'top-right');
+
 map.addControl(new mapboxgl.ScaleControl({ maxWidth: 100 }), 'bottom-right');
 
 // ═══════════════════════════════════
@@ -291,6 +300,35 @@ function updateMapControlsAfterTransition() {
     setTimeout(updateMapControls, 50);
 }
 
+function highlightSelectedArea(areaId) {
+    if (!map.getLayer('area-circle') || !map.getLayer('area-star')) return;
+    // Show selected area as blue circle, hide its star
+    map.setFilter('area-circle', ['any',
+        ['!=', ['get', 'Key_Area'], 1],
+        ['==', ['get', 'id'], areaId]
+    ]);
+    map.setFilter('area-star', ['all',
+        ['==', ['get', 'Key_Area'], 1],
+        ['!=', ['get', 'id'], areaId]
+    ]);
+    // Also show glow only for non-selected recommended areas
+    if (map.getLayer('area-glow')) {
+        map.setFilter('area-glow', ['all',
+            ['==', ['get', 'Key_Area'], 1],
+            ['!=', ['get', 'id'], areaId]
+        ]);
+    }
+}
+
+function resetAreaHighlight() {
+    if (!map.getLayer('area-circle') || !map.getLayer('area-star')) return;
+    map.setFilter('area-circle', ['!=', ['get', 'Key_Area'], 1]);
+    map.setFilter('area-star', ['==', ['get', 'Key_Area'], 1]);
+    if (map.getLayer('area-glow')) {
+        map.setFilter('area-glow', ['==', ['get', 'Key_Area'], 1]);
+    }
+}
+
 function selectArea(areaId, coords) {
     currentLevel = 2;
     currentAreaId = areaId;
@@ -316,6 +354,9 @@ function selectArea(areaId, coords) {
         map.fitBounds(bounds, { padding: getMapPadding(), maxZoom: DETAIL_ZOOM, duration: 1200 });
     }, 50);
 
+    // Highlight selected area as blue circle (even if it was a star)
+    highlightSelectedArea(areaId);
+
     showSpotsForArea(areaId);
     renderSpotCards(areaId);
     switchBottomSection(spotCards);
@@ -331,7 +372,11 @@ function selectArea(areaId, coords) {
 function selectSpot(feature) {
     currentLevel = 3;
     currentSpotFeature = feature;
+    resetFloatBtn();
     const coords = feature.geometry.coordinates.slice();
+
+    // Ensure bottom panel is visible
+    bottomPanel.classList.remove('panel-hidden');
 
     map.flyTo({ center: coords, zoom: 18.5, duration: 800, essential: true });
 
@@ -371,6 +416,7 @@ function goBack() {
         currentAreaId = null;
 
         hideSpots();
+        resetAreaHighlight();
 
         // Show area panel, hide bottom panel
         areaPanel.classList.remove('hidden');
