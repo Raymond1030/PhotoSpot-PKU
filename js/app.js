@@ -1,12 +1,12 @@
 /* ===================================
    PhotoSpot PKU — Main Application
-   Native Mapbox Layers (no DOM markers)
+   Map-dominant + Area panel + Bottom strips
    =================================== */
 
 // ── Data Base URL (Tencent COS) ──
 const DATA_BASE_URL = 'https://raymondstorage-1307420465.cos.ap-beijing.myqcloud.com/';
 
-// ── Mapbox Token (从 js/config.js 读取) ──
+// ── Mapbox Token (from js/config.js) ──
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
 // ── Map Style Presets ──
@@ -26,31 +26,40 @@ let areaData = null;
 let spotData = null;
 let imageManifest = null;
 let imageMetadata = null;
+let currentLevel = 1;
 let currentAreaId = null;
 let currentSpotFeature = null;
-let activePopup = null;
 let currentStyle = 'dark';
+let currentPhotoIndex = 0;
+let currentImages = [];
 
 // ── DOM Elements ──
-const panel = document.getElementById('panel');
-const areaList = document.getElementById('area-list');
-const spotDetail = document.getElementById('spot-detail');
-const spotPhotoDetail = document.getElementById('spot-photo-detail');
-const areasContainer = document.getElementById('areas-container');
-const spotsContainer = document.getElementById('spots-container');
-const areaInfo = document.getElementById('area-info');
-const spotPhotoHeader = document.getElementById('spot-photo-header');
-const spotPhotoGallery = document.getElementById('spot-photo-gallery');
-const backBtn = document.getElementById('back-btn');
-const loadingOverlay = document.getElementById('loading-overlay');
-const styleSwitcher = document.getElementById('style-switcher');
-
-// Debug: verify DOM elements
-console.log('[PhotoSpot] DOM init:', {
-    spotPhotoDetail: !!spotPhotoDetail,
-    spotPhotoHeader: !!spotPhotoHeader,
-    spotPhotoGallery: !!spotPhotoGallery
-});
+const $ = (sel) => document.querySelector(sel);
+const areaPanel = $('#area-panel');
+const areasContainer = $('#areas-container');
+const bottomPanel = $('#bottom-panel');
+const spotCards = $('#spot-cards');
+const photoDetail = $('#photo-detail');
+const cardsContainer = $('#cards-container');
+const photoStrip = $('#photo-strip');
+const photoDots = $('#photo-dots');
+const photoDesc = $('#photo-desc');
+const spotCardsTitle = $('#spot-cards-title');
+const spotCardsCount = $('#spot-cards-count');
+const brandBadge = $('#brand-badge');
+const backBtn = $('#back-btn');
+const loadingOverlay = $('#loading-overlay');
+const styleSwitcher = $('#style-switcher');
+const lightbox = $('#lightbox');
+const lightboxImg = $('#lightbox-img');
+const lightboxClose = $('#lightbox-close');
+const lightboxPrev = $('#lightbox-prev');
+const lightboxNext = $('#lightbox-next');
+const lightboxExif = $('#lightbox-exif');
+const lightboxSpotName = $('#lightbox-spot-name');
+const lightboxSpotArea = $('#lightbox-spot-area');
+const floatBtn = $('#float-btn');
+const floatBtnIcon = $('#float-btn-icon');
 
 // ── Initialize Map ──
 const map = new mapboxgl.Map({
@@ -65,15 +74,13 @@ const map = new mapboxgl.Map({
     attributionControl: false
 });
 
-// Add navigation controls
-map.addControl(new mapboxgl.NavigationControl({
-    showCompass: true,
-    showZoom: true
-}), 'bottom-right');
-
+map.addControl(new mapboxgl.NavigationControl({ showCompass: true, showZoom: true }), 'top-right');
 map.addControl(new mapboxgl.ScaleControl({ maxWidth: 100 }), 'bottom-right');
 
-// ── Load Data ──
+// ═══════════════════════════════════
+//  DATA LOADING
+// ═══════════════════════════════════
+
 async function loadData() {
     try {
         const [areaRes, spotRes, manifestRes, metaRes] = await Promise.all([
@@ -91,245 +98,91 @@ async function loadData() {
     }
 }
 
-// ── Get images for a spot ──
 function getSpotImages(areaId, spotId) {
     if (!imageManifest) return [];
-    const key = `${areaId}-${spotId}`;
-    return imageManifest[key] || [];
+    return imageManifest[`${areaId}-${spotId}`] || [];
 }
 
-// ── Get cover image for an area ──
 function getAreaCover(areaId) {
     if (!imageManifest || !imageManifest._covers) return null;
     return imageManifest._covers[String(areaId)] || null;
 }
 
-// ── Map Ready ──
-map.on('load', async () => {
-    await loadData();
-    addMapSources();
-    addMapLayers();
-    bindMapEvents();
-    renderAreaList();
-    fitAllAreas();
-    hideLoading();
-});
+// ── Image URL with COS resize (imageMogr2) ──
+// Appends Tencent COS image processing to resize server-side, avoiding loading 24MB originals as thumbnails
+function imgUrl(path, width) {
+    const url = DATA_BASE_URL + path;
+    if (!width) return url; // full size for lightbox
+    return url + '?imageMogr2/thumbnail/' + width + 'x/quality/80';
+}
 
-// ── Hide Loading ──
-function hideLoading() {
-    loadingOverlay.classList.add('fade-out');
-    setTimeout(() => {
-        loadingOverlay.style.display = 'none';
-    }, 600);
+// Clean up verbose lens model names (e.g. "SIGMA 56mm F1.4 DC DN | Contemporary 018" → "SIGMA 56mm F1.4 DC DN")
+function cleanLensModel(name) {
+    if (!name) return '';
+    return name.replace(/\s*\|\s*Contemporary\s*\d*/i, '').trim();
 }
 
 // ═══════════════════════════════════
-//  NATIVE MAPBOX SOURCES & LAYERS
+//  MAP SOURCES & LAYERS
 // ═══════════════════════════════════
 
 function addMapSources() {
-    // Area source (always visible)
-    map.addSource('areas', {
-        type: 'geojson',
-        data: areaData
-    });
-
-    // Spot source (filtered by area)
-    map.addSource('spots', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] }
-    });
+    map.addSource('areas', { type: 'geojson', data: areaData });
+    map.addSource('spots', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 }
 
 function addMapLayers() {
-    // ── AREA layers ──
-
-    // Outer glow ring for key areas
-    map.addLayer({
-        id: 'area-glow',
-        type: 'circle',
-        source: 'areas',
+    map.addLayer({ id: 'area-glow', type: 'circle', source: 'areas',
         filter: ['==', ['get', 'Key_Area'], 1],
+        paint: { 'circle-radius': 14, 'circle-color': 'rgba(56, 189, 248, 0.20)', 'circle-blur': 0.6 }
+    });
+    map.addLayer({ id: 'area-circle', type: 'circle', source: 'areas',
+        filter: ['!=', ['get', 'Key_Area'], 1],
         paint: {
-            'circle-radius': 14,
-            'circle-color': 'rgba(56, 189, 248, 0.20)',
-            'circle-blur': 0.6
+            'circle-radius': 6,
+            'circle-color': '#0ea5e9',
+            'circle-stroke-width': 2, 'circle-stroke-color': '#ffffff'
         }
     });
-
-    // Area circle
-    map.addLayer({
-        id: 'area-circle',
-        type: 'circle',
-        source: 'areas',
-        paint: {
-            'circle-radius': [
-                'case',
-                ['==', ['get', 'Key_Area'], 1], 7,
-                6
-            ],
-            'circle-color': [
-                'case',
-                ['==', ['get', 'Key_Area'], 1], '#38bdf8',
-                '#0ea5e9'
-            ],
-            'circle-stroke-width': 2,
-            'circle-stroke-color': '#ffffff'
-        }
+    map.addLayer({ id: 'area-star', type: 'symbol', source: 'areas',
+        filter: ['==', ['get', 'Key_Area'], 1],
+        layout: { 'text-field': '★', 'text-size': 24, 'text-allow-overlap': true, 'text-ignore-placement': true },
+        paint: { 'text-color': '#f59e0b', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 }
     });
-
-    // Area labels
-    map.addLayer({
-        id: 'area-label',
-        type: 'symbol',
-        source: 'areas',
+    map.addLayer({ id: 'area-label', type: 'symbol', source: 'areas',
         layout: {
             'text-field': ['get', 'Area_Name'],
             'text-font': ['Noto Sans CJK SC Regular', 'Arial Unicode MS Regular'],
-            'text-size': 12,
-            'text-offset': [0, 1.8],
-            'text-anchor': 'top',
-            'text-allow-overlap': false,
-            'text-ignore-placement': false
+            'text-size': 12, 'text-offset': [0, 1.8], 'text-anchor': 'top',
+            'text-allow-overlap': false, 'text-ignore-placement': false
         },
-        paint: {
-            'text-color': '#ffffff',
-            'text-halo-color': 'rgba(0, 0, 0, 0.75)',
-            'text-halo-width': 1.5
-        }
+        paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(0, 0, 0, 0.75)', 'text-halo-width': 1.5 }
     });
-
-    // ── SPOT layers ──
-
-    // Spot outer glow
-    map.addLayer({
-        id: 'spot-glow',
-        type: 'circle',
-        source: 'spots',
-        paint: {
-            'circle-radius': 10,
-            'circle-color': 'rgba(232, 167, 60, 0.20)',
-            'circle-blur': 0.5
-        }
+    map.addLayer({ id: 'spot-glow', type: 'circle', source: 'spots',
+        paint: { 'circle-radius': 10, 'circle-color': 'rgba(232, 167, 60, 0.20)', 'circle-blur': 0.5 }
     });
-
-    // Spot circle (non-key spots only)
-    map.addLayer({
-        id: 'spot-circle',
-        type: 'circle',
-        source: 'spots',
+    map.addLayer({ id: 'spot-circle', type: 'circle', source: 'spots',
         filter: ['!=', ['get', 'Key_Spot'], 1],
-        paint: {
-            'circle-radius': 5,
-            'circle-color': '#e8a73c',
-            'circle-stroke-width': 2,
-            'circle-stroke-color': '#ffffff'
-        }
+        paint: { 'circle-radius': 5, 'circle-color': '#e8a73c', 'circle-stroke-width': 2, 'circle-stroke-color': '#ffffff' }
     });
-
-    // Key spot star icon
-    map.addLayer({
-        id: 'spot-star',
-        type: 'symbol',
-        source: 'spots',
+    map.addLayer({ id: 'spot-star', type: 'symbol', source: 'spots',
         filter: ['==', ['get', 'Key_Spot'], 1],
-        layout: {
-            'text-field': '★',
-            'text-size': 22,
-            'text-allow-overlap': true,
-            'text-ignore-placement': true
-        },
-        paint: {
-            'text-color': '#f59e0b',
-            'text-halo-color': '#ffffff',
-            'text-halo-width': 1.5
-        }
+        layout: { 'text-field': '★', 'text-size': 22, 'text-allow-overlap': true, 'text-ignore-placement': true },
+        paint: { 'text-color': '#f59e0b', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 }
     });
-
-    // Spot name label
-    map.addLayer({
-        id: 'spot-label',
-        type: 'symbol',
-        source: 'spots',
+    map.addLayer({ id: 'spot-label', type: 'symbol', source: 'spots',
         layout: {
             'text-field': ['get', 'Spot_Name'],
             'text-font': ['Noto Sans CJK SC Regular', 'Arial Unicode MS Regular'],
-            'text-size': 11,
-            'text-offset': [0, 1.8],
-            'text-anchor': 'top',
-            'text-allow-overlap': false,
-            'text-ignore-placement': false
+            'text-size': 11, 'text-offset': [0, 1.8], 'text-anchor': 'top',
+            'text-allow-overlap': false, 'text-ignore-placement': false
         },
-        paint: {
-            'text-color': '#fde68a',
-            'text-halo-color': 'rgba(0, 0, 0, 0.75)',
-            'text-halo-width': 1.2
-        }
+        paint: { 'text-color': '#fde68a', 'text-halo-color': 'rgba(0, 0, 0, 0.75)', 'text-halo-width': 1.2 }
     });
 }
-
-// ═══════════════════════════════════
-//  MAP CLICK EVENTS
-// ═══════════════════════════════════
-
-function bindMapEvents() {
-    // ── Click area circle ──
-    map.on('click', 'area-circle', (e) => {
-        e.originalEvent.stopPropagation();
-        const feature = e.features[0];
-        const props = feature.properties;
-        const coords = feature.geometry.coordinates.slice();
-        selectArea(props.id, coords);
-    });
-
-    // ── Click spot circle or star ──
-    const handleSpotClick = (e) => {
-        e.originalEvent.stopPropagation();
-        const feature = e.features[0];
-        selectSpot(feature);
-        highlightSpotCard(feature.properties.Spot_id);
-    };
-    map.on('click', 'spot-circle', handleSpotClick);
-    map.on('click', 'spot-star', handleSpotClick);
-
-    // ── Cursor pointer on hover ──
-    map.on('mouseenter', 'area-circle', () => {
-        map.getCanvas().style.cursor = 'pointer';
-    });
-    map.on('mouseleave', 'area-circle', () => {
-        map.getCanvas().style.cursor = '';
-    });
-    ['spot-circle', 'spot-star'].forEach(layer => {
-        map.on('mouseenter', layer, () => {
-            map.getCanvas().style.cursor = 'pointer';
-        });
-        map.on('mouseleave', layer, () => {
-            map.getCanvas().style.cursor = '';
-        });
-    });
-
-    // ── Click empty map area ──
-    map.on('click', (e) => {
-        // Check if click was on a feature
-        const areaFeatures = map.queryRenderedFeatures(e.point, { layers: ['area-circle'] });
-        const spotFeatures = map.queryRenderedFeatures(e.point, { layers: ['spot-circle', 'spot-star'] });
-        if (areaFeatures.length === 0 && spotFeatures.length === 0) {
-            closePopup();
-            document.querySelectorAll('.spot-card').forEach(c => c.classList.remove('active'));
-            hideDrawer();
-        }
-    });
-}
-
-// ═══════════════════════════════════
-//  SPOT DATA UPDATE
-// ═══════════════════════════════════
 
 function showSpotsForArea(areaId) {
-    const filtered = {
-        type: 'FeatureCollection',
-        features: spotData.features.filter(f => f.properties.Area_id === areaId)
-    };
+    const filtered = { type: 'FeatureCollection', features: spotData.features.filter(f => f.properties.Area_id === areaId) };
     const source = map.getSource('spots');
     if (source) source.setData(filtered);
 }
@@ -340,222 +193,265 @@ function hideSpots() {
 }
 
 // ═══════════════════════════════════
-//  POPUP
+//  MAP EVENTS
 // ═══════════════════════════════════
 
-function showPopup(coords, html) {
-    closePopup();
-    activePopup = new mapboxgl.Popup({
-        offset: 14,
-        closeButton: true,
-        maxWidth: '320px'
-    })
-        .setLngLat(coords)
-        .setHTML(html)
-        .addTo(map);
+// Named handlers so we can remove before re-adding (prevents duplicates on style.load)
+function _onAreaClick(e) {
+    e.originalEvent.stopPropagation();
+    const feature = e.features[0];
+    selectArea(feature.properties.id, feature.geometry.coordinates.slice());
 }
 
-function closePopup() {
-    if (activePopup) {
-        activePopup.remove();
-        activePopup = null;
-    }
+function _onSpotClick(e) {
+    e.originalEvent.stopPropagation();
+    selectSpot(e.features[0]);
 }
 
-// ═══════════════════════════════════
-//  SELECT / NAVIGATE
-// ═══════════════════════════════════
+function _cursorPointer() { map.getCanvas().style.cursor = 'pointer'; }
+function _cursorDefault() { map.getCanvas().style.cursor = ''; }
 
-function fitAllAreas(usePanel) {
-    if (!areaData || areaData.features.length === 0) return;
-    const bounds = new mapboxgl.LngLatBounds();
-    areaData.features.forEach(f => bounds.extend(f.geometry.coordinates));
-    map.fitBounds(bounds, {
-        padding: usePanel ? getMapPadding() : { top: 60, left: 60, right: 60, bottom: 60 },
-        maxZoom: PKU_ZOOM,
-        duration: 1200
+function bindMapEvents() {
+    // Remove previous listeners first (safe even if not yet added)
+    map.off('click', 'area-circle', _onAreaClick);
+    map.off('click', 'area-star', _onAreaClick);
+    map.off('click', 'spot-circle', _onSpotClick);
+    map.off('click', 'spot-star', _onSpotClick);
+    ['area-circle', 'area-star', 'spot-circle', 'spot-star'].forEach(layer => {
+        map.off('mouseenter', layer, _cursorPointer);
+        map.off('mouseleave', layer, _cursorDefault);
+    });
+
+    // Add listeners
+    map.on('click', 'area-circle', _onAreaClick);
+    map.on('click', 'area-star', _onAreaClick);
+    map.on('click', 'spot-circle', _onSpotClick);
+    map.on('click', 'spot-star', _onSpotClick);
+    ['area-circle', 'area-star', 'spot-circle', 'spot-star'].forEach(layer => {
+        map.on('mouseenter', layer, _cursorPointer);
+        map.on('mouseleave', layer, _cursorDefault);
     });
 }
 
+// ═══════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════
+
+function isMobile() { return window.innerWidth <= 768; }
+
 function getMapPadding() {
-    if (isMobile()) {
-        const panelH = panel.offsetHeight || window.innerHeight * 0.6;
-        return { top: 100, left: 60, right: 60, bottom: panelH + 60 };
+    if (isMobile() && panelHidden) {
+        // Mobile with panel hidden: full-screen map, minimal padding
+        return { top: 60, left: 40, right: 40, bottom: 60 };
+    }
+    if (currentLevel === 1 && !isMobile()) {
+        // Desktop Level 1: sidebar on left
+        const panelW = areaPanel.offsetWidth + 32;
+        return { top: 80, left: panelW + 20, right: 60, bottom: 60 };
+    }
+    // Level 2/3 or mobile: bottom panel
+    const panelH = bottomPanel.offsetHeight || 120;
+    return { top: 80, left: 60, right: 60, bottom: panelH + 40 };
+}
+
+function fitAllAreas() {
+    if (!areaData || areaData.features.length === 0) return;
+    const bounds = new mapboxgl.LngLatBounds();
+    areaData.features.forEach(f => bounds.extend(f.geometry.coordinates));
+    map.fitBounds(bounds, { padding: getMapPadding(), maxZoom: PKU_ZOOM, duration: 1200 });
+}
+
+// ═══════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════
+
+function resetFloatBtn() {
+    panelHidden = false;
+    floatBtn.classList.remove('show-mode');
+    floatBtnIcon.textContent = '✕';
+}
+
+// Adjust map controls above panel on mobile
+function updateMapControls() {
+    if (!isMobile()) return;
+    const ctrl = document.querySelector('.mapboxgl-ctrl-bottom-right');
+    if (!ctrl) return;
+    if (panelHidden) {
+        ctrl.style.bottom = '10px';
     } else {
-        const panelW = panel.offsetWidth + 32;
-        return { top: 80, left: panelW + 40, right: 60, bottom: 60 };
+        // Get visible panel height after transition completes
+        const panel = currentLevel === 1 ? areaPanel : bottomPanel;
+        const h = panel.offsetHeight || 120;
+        ctrl.style.bottom = (h + 10) + 'px';
     }
 }
 
-function selectArea(areaId, coords) {
-    showDrawer();
-    currentAreaId = areaId;
+// Delayed version that waits for panel transition to finish
+function updateMapControlsAfterTransition() {
+    setTimeout(updateMapControls, 50);
+}
 
-    // Fit bounds with padding to avoid panel occlusion
+function selectArea(areaId, coords) {
+    currentLevel = 2;
+    currentAreaId = areaId;
+    currentSpotFeature = null;
+    resetFloatBtn();
+
+    const area = areaData.features.find(f => f.properties.id === areaId);
+    if (!area) return;
+
+    // Hide area panel, show bottom panel
+    areaPanel.classList.add('hidden');
+    bottomPanel.classList.remove('panel-hidden');
+    brandBadge.classList.add('visible');
+
+    // Fly to area bounds
     const spots = spotData.features.filter(f => f.properties.Area_id === areaId);
     const bounds = new mapboxgl.LngLatBounds();
     bounds.extend(coords);
     spots.forEach(f => bounds.extend(f.geometry.coordinates));
-    map.fitBounds(bounds, {
-        padding: getMapPadding(),
-        maxZoom: DETAIL_ZOOM,
-        duration: 1200
-    });
 
-    // Show spot markers for this area
+    // Small delay so panel transition starts before fly
+    setTimeout(() => {
+        map.fitBounds(bounds, { padding: getMapPadding(), maxZoom: DETAIL_ZOOM, duration: 1200 });
+    }, 50);
+
     showSpotsForArea(areaId);
+    renderSpotCards(areaId);
+    switchBottomSection(spotCards);
+    updateBackButton();
+    updateMapControlsAfterTransition();
 
-    // Get area info
-    const area = areaData.features.find(f => f.properties.id === areaId);
-    if (!area) return;
-
-    const props = area.properties;
-
-    // Update panel: show spot detail view
-    areaList.classList.add('hidden');
-    spotDetail.classList.remove('hidden');
-    backBtn.classList.remove('hidden');
-
-    // Render area info card
-    areaInfo.innerHTML = `
-        <div class="area-info-name">${props.Area_Name}</div>
-        ${props.Des ? `<div class="area-info-desc">${props.Des}</div>` : ''}
-    `;
-
-    // Render spot list
-    renderSpotList(areaId);
-
-    // Highlight active area card
-    document.querySelectorAll('.area-card').forEach(c => c.classList.remove('active'));
+    // Highlight card in area panel
+    document.querySelectorAll('.area-card').forEach(c => {
+        c.classList.toggle('active', parseInt(c.dataset.areaId) === areaId);
+    });
 }
 
 function selectSpot(feature) {
-    showDrawer();
-    console.log('[PhotoSpot] selectSpot called:', feature.properties.Spot_Name, feature.properties);
+    currentLevel = 3;
     currentSpotFeature = feature;
-    const props = feature.properties;
-    const coords = feature.geometry.coordinates.slice
-        ? feature.geometry.coordinates.slice()
-        : [feature.geometry.coordinates[0], feature.geometry.coordinates[1]];
+    const coords = feature.geometry.coordinates.slice();
 
-    map.flyTo({
-        center: coords,
-        zoom: 18.5,
-        duration: 800,
-        essential: true
+    map.flyTo({ center: coords, zoom: 18.5, duration: 800, essential: true });
+
+    renderPhotoDetail(feature);
+    switchBottomSection(photoDetail);
+    updateBackButton();
+    updateMapControlsAfterTransition();
+
+    document.querySelectorAll('.spot-card').forEach(c => {
+        c.classList.toggle('active', parseInt(c.dataset.spotId) === feature.properties.Spot_id);
     });
-
-    closePopup();
-
-    // Fade out Level 2 content, then switch to Level 3
-    spotDetail.classList.add('fading');
-    backBtn.classList.remove('hidden');
-    panel.classList.add('panel-expanded');
-
-    setTimeout(() => {
-        spotDetail.classList.add('hidden');
-        spotDetail.classList.remove('fading');
-        spotPhotoDetail.classList.remove('hidden');
-        renderSpotDetail(feature);
-    }, 180);
 }
 
 function goBack() {
-    if (currentSpotFeature) {
-        // Level 3 → Level 2: fade out then switch
+    resetFloatBtn();
+    if (currentLevel === 3) {
+        currentLevel = 2;
         currentSpotFeature = null;
-        closePopup();
+        currentImages = [];
 
-        spotPhotoDetail.classList.add('fading');
-        panel.classList.remove('panel-expanded');
+        switchBottomSection(spotCards);
+        updateBackButton();
+        updateMapControlsAfterTransition();
 
-        setTimeout(() => {
-            spotPhotoDetail.classList.add('hidden');
-            spotPhotoDetail.classList.remove('fading');
-            spotDetail.classList.remove('hidden');
-        }, 180);
-
-        // Fly back to area level
         const area = areaData.features.find(f => f.properties.id === currentAreaId);
         if (area) {
-            map.flyTo({
-                center: area.geometry.coordinates,
-                zoom: DETAIL_ZOOM,
-                duration: 800,
-                essential: true
-            });
+            const spots = spotData.features.filter(f => f.properties.Area_id === currentAreaId);
+            const bounds = new mapboxgl.LngLatBounds();
+            bounds.extend(area.geometry.coordinates);
+            spots.forEach(f => bounds.extend(f.geometry.coordinates));
+            map.fitBounds(bounds, { padding: getMapPadding(), maxZoom: DETAIL_ZOOM, duration: 800 });
         }
 
-        // Clear active spot card
         document.querySelectorAll('.spot-card').forEach(c => c.classList.remove('active'));
-    } else {
-        // Level 2 → Level 1: go back to area list
+    } else if (currentLevel === 2) {
+        currentLevel = 1;
         currentAreaId = null;
 
         hideSpots();
-        closePopup();
 
-        fitAllAreas(true);
+        // Show area panel, hide bottom panel
+        areaPanel.classList.remove('hidden');
+        bottomPanel.classList.add('panel-hidden');
+        brandBadge.classList.remove('visible');
 
-        spotDetail.classList.add('hidden');
-        spotPhotoDetail.classList.add('hidden');
-        areaList.classList.remove('hidden');
-        backBtn.classList.add('hidden');
-        panel.classList.remove('panel-expanded');
+        setTimeout(() => fitAllAreas(), 50);
+        updateBackButton();
+        updateMapControlsAfterTransition();
 
-        document.querySelectorAll('.spot-card').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.area-card').forEach(c => c.classList.remove('active'));
+    }
+}
+
+function switchBottomSection(section) {
+    [spotCards, photoDetail].forEach(s => s.classList.remove('active'));
+    section.classList.add('active');
+}
+
+function updateBackButton() {
+    if (currentLevel === 1) {
+        backBtn.classList.remove('visible');
+        backBtn.removeAttribute('data-level');
+        return;
+    }
+
+    backBtn.classList.add('visible');
+    backBtn.setAttribute('data-level', currentLevel);
+
+    const nameEl = backBtn.querySelector('.back-name');
+    const metaEl = backBtn.querySelector('.back-meta');
+
+    if (currentLevel === 2) {
+        const area = areaData.features.find(f => f.properties.id === currentAreaId);
+        const spotCount = spotData.features.filter(f => f.properties.Area_id === currentAreaId).length;
+        nameEl.textContent = area ? area.properties.Area_Name : '';
+        metaEl.textContent = `${spotCount} 个机位`;
+    } else if (currentLevel === 3) {
+        const props = currentSpotFeature.properties;
+        nameEl.textContent = props.Spot_Name;
+        metaEl.textContent = props.Area_Name;
     }
 }
 
 // ═══════════════════════════════════
-//  RENDER PANEL LISTS
+//  RENDER: AREA LIST (Level 1)
 // ═══════════════════════════════════
 
 function renderAreaList() {
     if (!areaData) return;
 
-    // Sort: key areas first
     const sorted = [...areaData.features].sort((a, b) => {
-        if (a.properties.Key_Area !== b.properties.Key_Area) {
-            return b.properties.Key_Area - a.properties.Key_Area;
-        }
-        return 0;
+        return (b.properties.Key_Area || 0) - (a.properties.Key_Area || 0);
     });
 
-    areasContainer.innerHTML = sorted.map(feature => {
+    areasContainer.innerHTML = sorted.map((feature, idx) => {
         const p = feature.properties;
         const coords = feature.geometry.coordinates;
-        const spotCount = spotData.features.filter(
-            f => f.properties.Area_id === p.id
-        ).length;
+        const spotCount = spotData.features.filter(f => f.properties.Area_id === p.id).length;
         const coverSrc = getAreaCover(p.id);
 
-        return `
-            <div class="area-card ${coverSrc ? 'has-cover' : ''}" data-area-id="${p.id}" data-lng="${coords[0]}" data-lat="${coords[1]}">
-                ${coverSrc ? `<div class="area-card-cover"><img src="${DATA_BASE_URL}${coverSrc}" alt="${p.Area_Name}" loading="lazy" onerror="this.parentElement.style.display='none'" /></div>` : ''}
-                <div class="area-card-body">
-                    <div class="area-card-header">
+        return `<div class="area-card card-stagger" data-area-id="${p.id}"
+                     data-lng="${coords[0]}" data-lat="${coords[1]}"
+                     style="animation-delay: ${idx * 40}ms">
+                    ${coverSrc
+                        ? `<div class="area-card-cover"><img src="${imgUrl(coverSrc, 300)}" alt="${p.Area_Name}" loading="lazy" onerror="this.parentElement.outerHTML='<div class=\\'area-card-no-cover\\'>📷</div>'" /></div>`
+                        : `<div class="area-card-no-cover">📷</div>`}
+                    <div class="area-card-body">
                         <div class="area-card-name">
                             ${p.Area_Name}
                             ${p.Key_Area ? '<span class="key-badge">⭐ 推荐</span>' : ''}
                         </div>
-                        <svg class="area-card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                        ${p.Des ? `<div class="area-card-desc">${p.Des}</div>` : ''}
+                        <div class="area-card-meta">
+                            ${spotCount > 0 ? `📍 ${spotCount} 个机位` : ''}
+                        </div>
                     </div>
-                    ${p.Des ? `<div class="area-card-desc">${p.Des}</div>` : ''}
-                    <div class="area-card-meta">
-                        ${spotCount > 0 ? `
-                            <span class="meta-item">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                                ${spotCount} 个机位
-                            </span>
-                        ` : ''}
-                    </div>
-                </div>
-            </div>
-        `;
+                    <div class="area-card-arrow">›</div>
+                </div>`;
     }).join('');
 
-    // Bind click events
     areasContainer.querySelectorAll('.area-card').forEach(card => {
         card.addEventListener('click', () => {
             const id = parseInt(card.dataset.areaId);
@@ -565,234 +461,217 @@ function renderAreaList() {
     });
 }
 
-function renderSpotList(areaId) {
+// ═══════════════════════════════════
+//  RENDER: SPOT CARDS (Level 2)
+// ═══════════════════════════════════
+
+function renderSpotCards(areaId) {
     const spots = spotData.features.filter(f => f.properties.Area_id === areaId);
+    const area = areaData.features.find(f => f.properties.id === areaId);
+
+    spotCardsTitle.textContent = area ? area.properties.Area_Name : '';
+    spotCardsCount.textContent = `${spots.length} 个机位`;
 
     if (spots.length === 0) {
-        spotsContainer.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-state-icon">🔭</div>
-                <div class="empty-state-text">暂无详细机位数据<br>更多内容即将上线</div>
-            </div>
-        `;
+        cardsContainer.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🔭</div><div class="empty-state-text">暂无详细机位数据<br>更多内容即将上线</div></div>`;
         return;
     }
 
-    // Key spots first, then non-key; preserve original order within each group
     spots.sort((a, b) => (b.properties.Key_Spot === 1 ? 1 : 0) - (a.properties.Key_Spot === 1 ? 1 : 0));
 
-    spotsContainer.innerHTML = spots.map(feature => {
+    cardsContainer.innerHTML = spots.map((feature, idx) => {
         const p = feature.properties;
-        const coords = feature.geometry.coordinates;
-        const images = getSpotImages(p.Area_id, p.Spot_id);
         const isKey = p.Key_Spot === 1;
-        return `
-            <div class="spot-card" data-spot-id="${p.Spot_id}" data-lng="${coords[0]}" data-lat="${coords[1]}">
-                <div class="spot-card-header">
-                    <span class="spot-index ${isKey ? 'spot-index-key' : ''}">${isKey ? '★' : '●'}</span>
-                    <span class="spot-card-name">${p.Spot_Name}</span>
-                    <svg class="spot-card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-                </div>
-                ${p.Des ? `<div class="spot-card-desc">${p.Des}</div>` : ''}
-            </div>
-        `;
+        const images = getSpotImages(p.Area_id, p.Spot_id);
+        const coverImg = images.length > 0 ? images[0] : null;
+
+        return `<div class="spot-card card-stagger" data-spot-id="${p.Spot_id}" style="animation-delay: ${idx * 50}ms">
+                    ${coverImg
+                        ? `<div class="spot-card-cover">
+                             <img src="${imgUrl(coverImg, 400)}" alt="${p.Spot_Name}" loading="lazy"
+                                  onerror="this.parentElement.outerHTML='<div class=\\'spot-card-no-cover\\'>📷</div>'" />
+                             ${isKey ? '<div class="spot-card-badge">⭐ 推荐</div>' : ''}
+                           </div>`
+                        : `<div class="spot-card-no-cover">${isKey ? '⭐' : '📷'}</div>`}
+                    <div class="spot-card-body">
+                        <div class="spot-card-name">${p.Spot_Name}</div>
+                        <div class="spot-card-meta">${images.length > 0 ? images.length + ' 张照片' : '暂无照片'}</div>
+                    </div>
+                </div>`;
     }).join('');
 
-    // Bind click events
-    spotsContainer.querySelectorAll('.spot-card').forEach(card => {
+    cardsContainer.querySelectorAll('.spot-card').forEach(card => {
         card.addEventListener('click', () => {
             const spotId = parseInt(card.dataset.spotId);
             const spot = spots.find(f => f.properties.Spot_id === spotId);
-            if (spot) {
-                selectSpot(spot);
-                highlightSpotCard(spotId);
-            }
+            if (spot) selectSpot(spot);
         });
     });
 }
 
-function highlightSpotCard(spotId) {
-    document.querySelectorAll('.spot-card').forEach(c => c.classList.remove('active'));
-    const card = document.querySelector(`.spot-card[data-spot-id="${spotId}"]`);
-    if (card) {
-        card.classList.add('active');
-        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+// ═══════════════════════════════════
+//  RENDER: PHOTO DETAIL (Level 3)
+// ═══════════════════════════════════
+
+function renderExifHtml(meta) {
+    if (!meta) return '';
+    const parts = [];
+    if (meta.Model) parts.push(meta.Model);
+    if (meta.FocalLength) parts.push(meta.FocalLength.replace(' ', ''));
+    if (meta.FNumber) parts.push(meta.FNumber);
+    if (meta.ISO) parts.push('ISO ' + meta.ISO);
+    if (meta.ExposureTime) parts.push(meta.ExposureTime + 's');
+    if (parts.length === 0) return '';
+
+    return `<div class="exif-overlay">
+                <div class="exif-main">${parts.join('<span class="exif-sep"> · </span>')}</div>
+                ${meta.LensModel ? `<div class="exif-lens">${cleanLensModel(meta.LensModel)}</div>` : ''}
+            </div>`;
+}
+
+function renderPhotoDetail(feature) {
+    const props = feature.properties;
+    const images = getSpotImages(props.Area_id, props.Spot_id);
+    currentImages = images;
+    currentPhotoIndex = 0;
+
+    photoDesc.textContent = props.Des || '';
+    photoDesc.style.display = props.Des ? 'block' : 'none';
+
+    if (images.length === 0) {
+        photoStrip.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📷</div><div class="empty-state-text">暂无示例照片</div></div>`;
+        photoDots.innerHTML = '';
+        return;
+    }
+
+    photoStrip.innerHTML = images.map((imgPath, idx) => {
+        const meta = imageMetadata && imageMetadata[imgPath];
+        return `<div class="photo-item ${idx === 0 ? 'active' : ''}" data-index="${idx}">
+                    <img src="${imgUrl(imgPath, 600)}" alt="${props.Spot_Name} - ${idx + 1}" loading="lazy"
+                         onerror="this.parentElement.style.display='none'" />
+                    ${renderExifHtml(meta)}
+                </div>`;
+    }).join('');
+
+    photoDots.innerHTML = images.length > 1
+        ? images.map((_, idx) => `<div class="photo-dot ${idx === 0 ? 'active' : ''}" data-index="${idx}"></div>`).join('')
+        : '';
+
+    setupPhotoStripEvents();
+}
+
+function setupPhotoStripEvents() {
+    const strip = photoStrip;
+    const items = strip.querySelectorAll('.photo-item');
+    const dots = photoDots.querySelectorAll('.photo-dot');
+
+    items.forEach((item, idx) => {
+        item.addEventListener('click', () => openLightbox(idx));
+    });
+
+    let scrollRaf = 0;
+    strip.addEventListener('scroll', () => {
+        if (scrollRaf) return;
+        scrollRaf = requestAnimationFrame(() => {
+            scrollRaf = 0;
+            const itemWidth = items[0]?.offsetWidth + 8;
+            const activeIdx = Math.round(strip.scrollLeft / itemWidth);
+            currentPhotoIndex = activeIdx;
+            items.forEach((item, i) => item.classList.toggle('active', i === activeIdx));
+            dots.forEach((dot, i) => dot.classList.toggle('active', i === activeIdx));
+        });
+    }, { passive: true });
+
+    dots.forEach(dot => {
+        dot.addEventListener('click', () => {
+            const idx = parseInt(dot.dataset.index);
+            const itemWidth = items[0]?.offsetWidth + 8;
+            strip.scrollTo({ left: idx * itemWidth, behavior: 'smooth' });
+        });
+    });
+}
+
+// ═══════════════════════════════════
+//  LIGHTBOX
+// ═══════════════════════════════════
+
+function openLightbox(index) {
+    if (currentImages.length === 0) return;
+    currentPhotoIndex = index;
+    lightbox.classList.add('active');
+    requestAnimationFrame(() => lightbox.classList.add('fade-in'));
+    updateLightboxContent();
+    if (currentSpotFeature) {
+        lightboxSpotName.textContent = currentSpotFeature.properties.Spot_Name;
+        lightboxSpotArea.textContent = currentSpotFeature.properties.Area_Name;
     }
 }
 
-function renderSpotDetail(feature) {
-    const props = feature.properties;
-    const images = getSpotImages(props.Area_id, props.Spot_id);
+function closeLightbox() {
+    lightbox.classList.remove('fade-in');
+    setTimeout(() => { lightbox.classList.remove('active'); lightboxImg.src = ''; }, 300);
+}
 
-    // Render header info card
-    spotPhotoHeader.innerHTML = `
-        <div class="spot-detail-name">
-            ${props.Spot_Name}
-        </div>
-        ${props.Des ? `<div class="spot-detail-desc">${props.Des}</div>` : ''}
-        <div class="spot-detail-area">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-            ${props.Area_Name}
-        </div>
-    `;
+function updateLightboxContent() {
+    const imgPath = currentImages[currentPhotoIndex];
+    if (!imgPath) return;
 
-    // Helper to render EXIF overlay
-    function renderExifOverlay(meta) {
-        if (!meta) return '';
+    lightboxImg.src = imgUrl(imgPath); // full resolution for lightbox
+    lightboxImg.alt = `照片 ${currentPhotoIndex + 1}`;
+
+    const meta = imageMetadata && imageMetadata[imgPath];
+    if (meta) {
         const parts = [];
         if (meta.Model) parts.push(meta.Model);
         if (meta.FocalLength) parts.push(meta.FocalLength.replace(' ', ''));
         if (meta.FNumber) parts.push(meta.FNumber);
-        if (meta.ISO) parts.push(`ISO ${meta.ISO}`);
-        if (meta.ExposureTime) parts.push(`${meta.ExposureTime}s`);
-
-        if (parts.length === 0) return '';
-
-        return `
-            <div class="exif-overlay">
-                <div class="exif-main">${parts.join(' · ')}</div>
-                ${meta.LensModel ? `<div class="exif-lens">${meta.LensModel}</div>` : ''}
-            </div>
-        `;
-    }
-
-    // Render photo gallery
-    if (images.length > 0) {
-        spotPhotoGallery.innerHTML = `
-            <div class="slider-container">
-                ${images.length > 1 ? `
-                    <button class="slider-arrow slider-arrow-left" aria-label="上一张">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M15 18l-6-6 6-6"/>
-                        </svg>
-                    </button>
-                    <button class="slider-arrow slider-arrow-right" aria-label="下一张">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M9 18l6-6-6-6"/>
-                        </svg>
-                    </button>
-                ` : ''}
-                <div class="slider-track" id="slider-track">
-                    ${images.map((imgPath, idx) => {
-            const meta = imageMetadata && imageMetadata[imgPath];
-            return `
-                        <div class="gallery-item">
-                            <img class="gallery-image" src="${DATA_BASE_URL}${imgPath}" alt="${props.Spot_Name} - 照片 ${idx + 1}" loading="lazy"
-                                 onerror="this.parentElement.style.display='none'"
-                                 onclick="window.openLightbox && window.openLightbox('${DATA_BASE_URL}${imgPath}')" />
-                            ${meta ? renderExifOverlay(meta) : ''}
-                        </div>
-                    `}).join('')}
-                </div>
-            </div>
-            ${images.length > 1 ? `
-                <div class="slider-dots" id="slider-dots">
-                    ${images.map((_, idx) => `
-                        <span class="slider-dot ${idx === 0 ? 'active' : ''}" data-index="${idx}"></span>
-                    `).join('')}
-                </div>
-            ` : ''}
-        `;
-
-        // Cache DOM references for slider height adaptation
-        const sliderTrack = document.getElementById('slider-track');
-        const galleryImages = sliderTrack.querySelectorAll('.gallery-image');
-        let lastSliderIndex = -1;
-
-        // Adapt slider height to current image (uses cached refs)
-        function updateSliderHeight(index, animate) {
-            if (index === lastSliderIndex) return;
-            const img = galleryImages[index];
-            if (!img || !img.naturalHeight) return;
-            lastSliderIndex = index;
-            const aspectH = (img.naturalHeight / img.naturalWidth) * sliderTrack.clientWidth;
-            if (animate) {
-                sliderTrack.style.transition = 'height 0.3s ease';
-            }
-            sliderTrack.style.height = aspectH + 'px';
-            if (animate) {
-                // Remove transition after it completes to avoid interfering with panel animations
-                setTimeout(() => { sliderTrack.style.transition = ''; }, 320);
-            }
-        }
-
-        // Set initial height once first image loads
-        {
-            const firstImg = galleryImages[0];
-            if (firstImg) {
-                const setInitialHeight = () => updateSliderHeight(0, false);
-                if (firstImg.complete && firstImg.naturalHeight) {
-                    setInitialHeight();
-                } else {
-                    firstImg.addEventListener('load', setInitialHeight, { once: true });
-                }
-            }
-        }
-
-        // Add Event Listeners for slider if there are multiple images
-        if (images.length > 1) {
-            const track = sliderTrack;
-            const dots = document.querySelectorAll('.slider-dot');
-            const leftBtn = document.querySelector('.slider-arrow-left');
-            const rightBtn = document.querySelector('.slider-arrow-right');
-
-            // Ensure all images update height when they load
-            galleryImages.forEach((img, idx) => {
-                img.addEventListener('load', () => {
-                    const activeIndex = Math.round(track.scrollLeft / track.clientWidth);
-                    if (idx === activeIndex) {
-                        updateSliderHeight(idx, false);
-                    }
-                }, { once: true });
-            });
-
-            // Throttled scroll handler using rAF
-            let scrollRafId = 0;
-            track.addEventListener('scroll', () => {
-                if (scrollRafId) return;
-                scrollRafId = requestAnimationFrame(() => {
-                    scrollRafId = 0;
-                    const activeIndex = Math.round(track.scrollLeft / track.clientWidth);
-
-                    dots.forEach((dot, index) => {
-                        dot.classList.toggle('active', index === activeIndex);
-                    });
-
-                    updateSliderHeight(activeIndex, true);
-                });
-            }, { passive: true });
-
-            // Click dots to navigate
-            dots.forEach(dot => {
-                dot.addEventListener('click', (e) => {
-                    const index = parseInt(e.target.dataset.index);
-                    track.scrollTo({
-                        left: index * track.clientWidth,
-                        behavior: 'smooth'
-                    });
-                });
-            });
-
-            // Left/Right arrow navigation
-            if (leftBtn && rightBtn) {
-                leftBtn.addEventListener('click', () => {
-                    track.scrollBy({ left: -track.clientWidth, behavior: 'smooth' });
-                });
-
-                rightBtn.addEventListener('click', () => {
-                    track.scrollBy({ left: track.clientWidth, behavior: 'smooth' });
-                });
-            }
-        }
+        if (meta.ISO) parts.push('ISO ' + meta.ISO);
+        if (meta.ExposureTime) parts.push(meta.ExposureTime + 's');
+        lightboxExif.innerHTML = `
+            <div class="lightbox-exif-main">${parts.join(' · ')}</div>
+            ${meta.LensModel ? `<div class="lightbox-exif-lens">${meta.LensModel}</div>` : ''}
+            <div class="lightbox-exif-page">${currentPhotoIndex + 1} / ${currentImages.length}</div>`;
     } else {
-        spotPhotoGallery.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-state-icon">📷</div>
-                <div class="empty-state-text">暂无示例照片<br>更多内容即将上线</div>
-            </div>
-        `;
+        lightboxExif.innerHTML = `<div class="lightbox-exif-page">${currentPhotoIndex + 1} / ${currentImages.length}</div>`;
     }
+    lightboxExif.style.display = 'block';
+
+    lightboxPrev.style.display = currentPhotoIndex > 0 ? 'flex' : 'none';
+    lightboxNext.style.display = currentPhotoIndex < currentImages.length - 1 ? 'flex' : 'none';
 }
+
+function lightboxNavigate(dir) {
+    const n = currentPhotoIndex + dir;
+    if (n < 0 || n >= currentImages.length) return;
+    currentPhotoIndex = n;
+    updateLightboxContent();
+}
+
+lightboxClose.addEventListener('click', closeLightbox);
+lightboxPrev.addEventListener('click', () => lightboxNavigate(-1));
+lightboxNext.addEventListener('click', () => lightboxNavigate(1));
+lightbox.addEventListener('click', (e) => { if (e.target === lightbox) closeLightbox(); });
+
+document.addEventListener('keydown', (e) => {
+    if (!lightbox.classList.contains('active')) return;
+    if (e.key === 'Escape') closeLightbox();
+    if (e.key === 'ArrowLeft') lightboxNavigate(-1);
+    if (e.key === 'ArrowRight') lightboxNavigate(1);
+});
+
+// Touch swipe for lightbox
+(function initLightboxSwipe() {
+    let startX = 0, startY = 0, swiping = false;
+    lightboxImg.addEventListener('touchstart', (e) => { startX = e.touches[0].clientX; startY = e.touches[0].clientY; swiping = true; }, { passive: true });
+    lightboxImg.addEventListener('touchend', (e) => {
+        if (!swiping) return;
+        swiping = false;
+        const dx = e.changedTouches[0].clientX - startX;
+        const dy = e.changedTouches[0].clientY - startY;
+        if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) { dx > 0 ? lightboxNavigate(-1) : lightboxNavigate(1); }
+        else if (dy > 80 && Math.abs(dy) > Math.abs(dx)) { closeLightbox(); }
+    }, { passive: true });
+})();
 
 // ═══════════════════════════════════
 //  STYLE SWITCHER
@@ -801,31 +680,18 @@ function renderSpotDetail(feature) {
 styleSwitcher.addEventListener('click', (e) => {
     const btn = e.target.closest('.style-btn');
     if (!btn || btn.classList.contains('active')) return;
-
-    const style = btn.dataset.style;
-    currentStyle = style;
-
-    // Update button states
+    currentStyle = btn.dataset.style;
     styleSwitcher.querySelectorAll('.style-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-
-    // Change map style
-    map.setStyle(MAP_STYLES[style]);
+    map.setStyle(MAP_STYLES[currentStyle]);
 });
 
-// When style changes, re-add sources & layers
 map.on('style.load', () => {
-    // Only re-add if data is loaded (skip initial style.load)
     if (!areaData) return;
-
     addMapSources();
     addMapLayers();
     bindMapEvents();
-
-    // If we were viewing a specific area, re-show its spots
-    if (currentAreaId) {
-        showSpotsForArea(currentAreaId);
-    }
+    if (currentAreaId) showSpotsForArea(currentAreaId);
 });
 
 // ═══════════════════════════════════
@@ -835,93 +701,136 @@ map.on('style.load', () => {
 backBtn.addEventListener('click', goBack);
 
 // ═══════════════════════════════════
-//  MOBILE DRAWER TOUCH SUPPORT
+//  MOBILE DRAWER GESTURES
 // ═══════════════════════════════════
 
-// ═══════════════════════════════════
-//  MOBILE DRAWER SHOW / HIDE
-// ═══════════════════════════════════
+(function initDrawerGestures() {
+    document.querySelectorAll('.panel-handle').forEach(handle => {
+        let startY = 0, dy = 0, isDragging = false, startH = 0;
+        const panel = handle.parentElement;
+        const isAreaPanel = panel.id === 'area-panel';
 
-function isMobile() {
-    return window.innerWidth <= 768;
-}
+        handle.addEventListener('pointerdown', (e) => {
+            if (!isMobile()) return;
+            isDragging = true;
+            startY = e.clientY;
+            dy = 0;
+            startH = panel.offsetHeight;
+            handle.setPointerCapture(e.pointerId);
+            panel.style.transition = 'none';
+        });
 
-// Solid fallback color used while backdrop-filter is off during animations
-const PANEL_BG_SOLID = 'rgb(15, 25, 35)';
+        handle.addEventListener('pointermove', (e) => {
+            if (!isDragging) return;
+            dy = e.clientY - startY;
 
-function showDrawer() {
-    if (!isMobile()) return;
-    // 1. Prepare off-screen: set height, swap to solid bg + no blur for smooth animation
-    panel.style.transition = 'none';
-    panel.style.height = '60vh';
-    panel.style.background = PANEL_BG_SOLID;
-    panel.style.backdropFilter = 'none';
-    panel.style.webkitBackdropFilter = 'none';
-    panel.classList.remove('drawer-collapsed', 'drawer-expanded');
-    // 2. Force layout
-    panel.offsetHeight;
-    // 3. Animate transform only
-    panel.style.transition = '';
-    panel.classList.remove('drawer-hidden');
-    document.body.classList.remove('drawer-is-hidden');
-    // 4. Restore blur + transparent bg after animation
-    panel.addEventListener('transitionend', function onEnd(e) {
-        if (e.propertyName !== 'transform') return;
-        panel.removeEventListener('transitionend', onEnd);
-        panel.style.background = '';
-        panel.style.backdropFilter = '';
-        panel.style.webkitBackdropFilter = '';
+            if (dy < 0 && isAreaPanel) {
+                // Pulling up: increase panel height
+                const maxH = window.innerHeight * 0.9;
+                const newH = Math.min(startH - dy, maxH);
+                panel.style.height = newH + 'px';
+                panel.style.maxHeight = newH + 'px';
+            } else if (dy > 0) {
+                // Pulling down: use translateY
+                panel.style.transform = `translateY(${dy}px)`;
+            }
+        });
+
+        handle.addEventListener('pointerup', () => {
+            if (!isDragging) return;
+            isDragging = false;
+            panel.style.transition = '';
+
+            if (dy < -60 && isAreaPanel) {
+                // Pulled up: snap to expanded height
+                panel.classList.add('expanded');
+                panel.style.height = '';
+                panel.style.maxHeight = '';
+                panel.style.transform = '';
+                updateMapControlsAfterTransition();
+            } else if (dy < 0 && isAreaPanel) {
+                // Small pull up: snap back
+                panel.style.height = '';
+                panel.style.maxHeight = '';
+                panel.style.transform = '';
+            } else if (dy > 60 && isAreaPanel && panel.classList.contains('expanded')) {
+                // Pulled down while expanded: collapse back
+                panel.classList.remove('expanded');
+                panel.style.height = '';
+                panel.style.maxHeight = '';
+                panel.style.transform = '';
+                updateMapControlsAfterTransition();
+            } else if (dy > 100 && currentLevel > 1) {
+                panel.style.transform = '';
+                goBack();
+            } else {
+                panel.style.height = '';
+                panel.style.maxHeight = '';
+                panel.style.transform = '';
+            }
+        });
+
+        handle.addEventListener('pointercancel', () => {
+            if (!isDragging) return;
+            isDragging = false;
+            panel.style.transition = '';
+            panel.style.height = '';
+            panel.style.maxHeight = '';
+            panel.style.transform = '';
+        });
     });
-}
-
-function hideDrawer() {
-    if (!isMobile()) return;
-    // Swap to solid bg + disable blur during slide-out
-    panel.style.background = PANEL_BG_SOLID;
-    panel.style.backdropFilter = 'none';
-    panel.style.webkitBackdropFilter = 'none';
-    panel.classList.add('drawer-hidden');
-    document.body.classList.add('drawer-is-hidden');
-    panel.classList.remove('drawer-collapsed', 'drawer-expanded');
-    // Clean up after animation
-    panel.addEventListener('transitionend', function onEnd(e) {
-        if (e.propertyName !== 'transform') return;
-        panel.removeEventListener('transitionend', onEnd);
-        panel.style.background = '';
-        panel.style.backdropFilter = '';
-        panel.style.webkitBackdropFilter = '';
-        panel.style.height = '';
-    });
-}
-
-// Start hidden on mobile
-if (isMobile()) {
-    hideDrawer();
-}
+})();
 
 // ═══════════════════════════════════
-//  DRAGGABLE FLOATING TOGGLE BALL
+//  MOBILE FLOAT BUTTON
 // ═══════════════════════════════════
 
-(function initDraggableBall() {
-    const btn = document.getElementById('drawer-toggle-btn');
-    let isDragging = false;
-    let hasMoved = false;
-    let startX = 0, startY = 0;
-    let btnStartX = 0, btnStartY = 0;
+let panelHidden = false;
 
-    // ── Touch drag ──
-    btn.addEventListener('touchstart', (e) => {
+function togglePanel() {
+    if (panelHidden) {
+        // Show panel
+        if (currentLevel === 1) {
+            areaPanel.classList.remove('hidden');
+        } else {
+            bottomPanel.classList.remove('panel-hidden');
+        }
+        panelHidden = false;
+        floatBtn.classList.remove('show-mode');
+        floatBtnIcon.textContent = '✕';
+    } else {
+        // Hide panel
+        if (currentLevel === 1) {
+            areaPanel.classList.add('hidden');
+        } else {
+            bottomPanel.classList.add('panel-hidden');
+        }
+        panelHidden = true;
+        floatBtn.classList.add('show-mode');
+        floatBtnIcon.textContent = '📷';
+    }
+}
+
+floatBtn.addEventListener('click', () => {
+    togglePanel();
+    updateMapControlsAfterTransition();
+});
+
+// Make float button draggable on mobile
+(function initFloatBtnDrag() {
+    let isDragging = false, hasMoved = false;
+    let startX = 0, startY = 0, btnStartX = 0, btnStartY = 0;
+
+    floatBtn.addEventListener('touchstart', (e) => {
         isDragging = true;
         hasMoved = false;
         const touch = e.touches[0];
         startX = touch.clientX;
         startY = touch.clientY;
-        const rect = btn.getBoundingClientRect();
+        const rect = floatBtn.getBoundingClientRect();
         btnStartX = rect.left;
         btnStartY = rect.top;
-        btn.classList.add('dragging');
-        e.preventDefault(); // prevent ghost clicks
+        e.preventDefault();
     });
 
     document.addEventListener('touchmove', (e) => {
@@ -929,146 +838,63 @@ if (isMobile()) {
         const touch = e.touches[0];
         const dx = touch.clientX - startX;
         const dy = touch.clientY - startY;
+        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) hasMoved = true;
 
-        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-            hasMoved = true;
-        }
-
-        const newX = Math.max(0, Math.min(btnStartX + dx, window.innerWidth - btn.offsetWidth));
-        const newY = Math.max(0, Math.min(btnStartY + dy, window.innerHeight - btn.offsetHeight));
-
-        btn.style.left = newX + 'px';
-        btn.style.top = newY + 'px';
-        btn.style.bottom = 'auto';
-        btn.style.right = 'auto';
+        const newX = Math.max(0, Math.min(btnStartX + dx, window.innerWidth - floatBtn.offsetWidth));
+        const newY = Math.max(0, Math.min(btnStartY + dy, window.innerHeight - floatBtn.offsetHeight));
+        floatBtn.style.left = newX + 'px';
+        floatBtn.style.top = newY + 'px';
+        floatBtn.style.right = 'auto';
+        floatBtn.style.bottom = 'auto';
     }, { passive: true });
 
     document.addEventListener('touchend', () => {
         if (!isDragging) return;
         isDragging = false;
-        btn.classList.remove('dragging');
 
-        // Snap to nearest horizontal edge
-        const rect = btn.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
+        // Snap to nearest edge
+        const rect = floatBtn.getBoundingClientRect();
         const margin = 16;
-        if (centerX < window.innerWidth / 2) {
-            btn.style.left = margin + 'px';
+        if (rect.left + rect.width / 2 < window.innerWidth / 2) {
+            floatBtn.style.left = margin + 'px';
+            floatBtn.style.right = 'auto';
         } else {
-            btn.style.left = (window.innerWidth - btn.offsetWidth - margin) + 'px';
+            floatBtn.style.left = 'auto';
+            floatBtn.style.right = margin + 'px';
         }
 
-        // If didn't move, treat as tap → show drawer
         if (!hasMoved) {
-            showDrawer();
+            togglePanel();
+            updateMapControlsAfterTransition();
         }
-    });
-
-    // ── Mouse click (DevTools / desktop fallback) ──
-    btn.addEventListener('click', () => {
-        showDrawer();
     });
 })();
 
 // ═══════════════════════════════════
-//  DRAWER DRAG GESTURES
+//  LOADING & INIT
 // ═══════════════════════════════════
 
-(function initDrawerGestures() {
-    const handle = document.getElementById('panel-handle');
-    const panelContent = panel.querySelector('.panel-content');
-    let startY = 0;
-    let startHeight = 0;
-    let isDragging = false;
-    let wasExpanded = false;
+function hideLoading() {
+    loadingOverlay.classList.add('fade-out');
+    setTimeout(() => { loadingOverlay.style.display = 'none'; }, 600);
+}
 
-    // Use touch-action CSS to prevent browser scroll when dragging the handle
-    handle.style.touchAction = 'none';
+map.on('load', async () => {
+    await loadData();
+    addMapSources();
+    addMapLayers();
+    bindMapEvents();
+    renderAreaList();
 
-    handle.addEventListener('pointerdown', (e) => {
-        if (!isMobile()) return;
-        isDragging = true;
-        wasExpanded = panel.classList.contains('panel-expanded');
-        startY = e.clientY;
-        startHeight = panel.offsetHeight;
-        handle.setPointerCapture(e.pointerId);
-
-        panel.classList.add('dragging');
-        panel.style.transition = 'none';
-        panel.style.minHeight = '0';
-        panel.style.height = startHeight + 'px';
-        // Prevent panel content from scrolling during drag
-        panelContent.style.overflowY = 'hidden';
-    });
-
-    handle.addEventListener('pointermove', (e) => {
-        if (!isDragging) return;
-        const dy = startY - e.clientY;
-        const newHeight = Math.min(
-            Math.max(startHeight + dy, 40),
-            window.innerHeight * 0.85
-        );
-        panel.style.height = newHeight + 'px';
-    });
-
-    function finishDrag() {
-        panel.classList.remove('dragging');
-        panel.style.transition = '';
-        panel.style.minHeight = '';
-        panel.style.height = '';
-        panelContent.style.overflowY = '';
+    // Mobile: hide panel first so fitAllAreas uses full-screen padding
+    if (isMobile()) {
+        areaPanel.classList.add('hidden');
+        panelHidden = true;
+        floatBtn.classList.add('show-mode');
+        floatBtnIcon.textContent = '📷';
     }
 
-    handle.addEventListener('pointerup', (e) => {
-        if (!isDragging) return;
-        isDragging = false;
-
-        // Read height BEFORE restoring minHeight
-        const h = panel.offsetHeight;
-        const vh = window.innerHeight;
-
-        if (wasExpanded) {
-            finishDrag();
-            if (h < startHeight - vh * 0.1) {
-                goBack();
-            }
-            return;
-        }
-
-        if (h < vh * 0.15) {
-            // Hide: keep minHeight=0 and small height until transform kicks in
-            panel.classList.remove('dragging');
-            panel.style.transition = '';
-            panelContent.style.overflowY = '';
-            hideDrawer();
-            // Clean up inline styles after hide transition
-            setTimeout(() => {
-                panel.style.minHeight = '';
-                panel.style.height = '';
-            }, 350);
-        } else {
-            finishDrag();
-            if (h < vh * 0.25) {
-                panel.style.height = '120px';
-                panel.classList.add('drawer-collapsed');
-                panel.classList.remove('drawer-expanded');
-            } else if (h > vh * 0.55) {
-                panel.style.height = '85vh';
-                panel.classList.add('drawer-expanded');
-                panel.classList.remove('drawer-collapsed');
-            } else {
-                panel.style.height = '60vh';
-                panel.classList.remove('drawer-collapsed', 'drawer-expanded');
-            }
-        }
-    });
-
-    handle.addEventListener('pointercancel', () => {
-        if (!isDragging) return;
-        isDragging = false;
-        panel.classList.remove('dragging');
-        panel.style.transition = '';
-        panel.style.minHeight = '';
-        panelContent.style.overflowY = '';
-    });
-})();
+    fitAllAreas();
+    hideLoading();
+    updateMapControlsAfterTransition();
+});
