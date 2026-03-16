@@ -884,7 +884,10 @@ floatBtn.addEventListener('click', () => {
         const touch = e.touches[0];
         const dx = touch.clientX - startX;
         const dy = touch.clientY - startY;
-        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) hasMoved = true;
+        if (!hasMoved && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
+            hasMoved = true;
+            floatBtn.classList.add('dragging');
+        }
 
         const newX = Math.max(0, Math.min(btnStartX + dx, window.innerWidth - floatBtn.offsetWidth));
         const newY = Math.max(0, Math.min(btnStartY + dy, window.innerHeight - floatBtn.offsetHeight));
@@ -897,19 +900,22 @@ floatBtn.addEventListener('click', () => {
     document.addEventListener('touchend', () => {
         if (!isDragging) return;
         isDragging = false;
+        floatBtn.classList.remove('dragging');
 
-        // Snap to nearest edge
-        const rect = floatBtn.getBoundingClientRect();
-        const margin = 16;
-        if (rect.left + rect.width / 2 < window.innerWidth / 2) {
-            floatBtn.style.left = margin + 'px';
-            floatBtn.style.right = 'auto';
+        if (hasMoved) {
+            // Snap to nearest edge with animation
+            floatBtn.classList.add('snapping');
+            const rect = floatBtn.getBoundingClientRect();
+            const margin = 16;
+            if (rect.left + rect.width / 2 < window.innerWidth / 2) {
+                floatBtn.style.left = margin + 'px';
+                floatBtn.style.right = 'auto';
+            } else {
+                floatBtn.style.left = 'auto';
+                floatBtn.style.right = margin + 'px';
+            }
+            setTimeout(() => floatBtn.classList.remove('snapping'), 300);
         } else {
-            floatBtn.style.left = 'auto';
-            floatBtn.style.right = margin + 'px';
-        }
-
-        if (!hasMoved) {
             togglePanel();
             updateMapControlsAfterTransition();
         }
