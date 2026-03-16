@@ -694,23 +694,33 @@ function renderSpotDetail(feature) {
             ` : ''}
         `;
 
-        // Adapt slider height to current image
-        function updateSliderHeight(track, index) {
-            const items = track.querySelectorAll('.gallery-item');
-            if (!items[index]) return;
-            const img = items[index].querySelector('.gallery-image');
-            if (img && img.naturalHeight) {
-                const aspectH = (img.naturalHeight / img.naturalWidth) * track.clientWidth;
-                track.style.height = aspectH + 'px';
+        // Cache DOM references for slider height adaptation
+        const sliderTrack = document.getElementById('slider-track');
+        const galleryImages = sliderTrack.querySelectorAll('.gallery-image');
+        let lastSliderIndex = -1;
+
+        // Adapt slider height to current image (uses cached refs)
+        function updateSliderHeight(index, animate) {
+            if (index === lastSliderIndex) return;
+            const img = galleryImages[index];
+            if (!img || !img.naturalHeight) return;
+            lastSliderIndex = index;
+            const aspectH = (img.naturalHeight / img.naturalWidth) * sliderTrack.clientWidth;
+            if (animate) {
+                sliderTrack.style.transition = 'height 0.3s ease';
+            }
+            sliderTrack.style.height = aspectH + 'px';
+            if (animate) {
+                // Remove transition after it completes to avoid interfering with panel animations
+                setTimeout(() => { sliderTrack.style.transition = ''; }, 320);
             }
         }
 
         // Set initial height once first image loads
         {
-            const track = document.getElementById('slider-track');
-            const firstImg = track.querySelector('.gallery-image');
+            const firstImg = galleryImages[0];
             if (firstImg) {
-                const setInitialHeight = () => updateSliderHeight(track, 0);
+                const setInitialHeight = () => updateSliderHeight(0, false);
                 if (firstImg.complete && firstImg.naturalHeight) {
                     setInitialHeight();
                 } else {
@@ -721,36 +731,36 @@ function renderSpotDetail(feature) {
 
         // Add Event Listeners for slider if there are multiple images
         if (images.length > 1) {
-            const track = document.getElementById('slider-track');
+            const track = sliderTrack;
             const dots = document.querySelectorAll('.slider-dot');
             const leftBtn = document.querySelector('.slider-arrow-left');
             const rightBtn = document.querySelector('.slider-arrow-right');
 
             // Ensure all images update height when they load
-            track.querySelectorAll('.gallery-image').forEach((img, idx) => {
+            galleryImages.forEach((img, idx) => {
                 img.addEventListener('load', () => {
-                    // Update height if this is the currently visible image
                     const activeIndex = Math.round(track.scrollLeft / track.clientWidth);
                     if (idx === activeIndex) {
-                        updateSliderHeight(track, idx);
+                        updateSliderHeight(idx, false);
                     }
                 }, { once: true });
             });
 
-            // Update dots and height on scroll
+            // Throttled scroll handler using rAF
+            let scrollRafId = 0;
             track.addEventListener('scroll', () => {
-                const scrollLeft = track.scrollLeft;
-                const itemWidth = track.clientWidth;
-                // Calculate which item is mostly in view
-                const activeIndex = Math.round(scrollLeft / itemWidth);
+                if (scrollRafId) return;
+                scrollRafId = requestAnimationFrame(() => {
+                    scrollRafId = 0;
+                    const activeIndex = Math.round(track.scrollLeft / track.clientWidth);
 
-                dots.forEach((dot, index) => {
-                    dot.classList.toggle('active', index === activeIndex);
+                    dots.forEach((dot, index) => {
+                        dot.classList.toggle('active', index === activeIndex);
+                    });
+
+                    updateSliderHeight(activeIndex, true);
                 });
-
-                // Adapt height to current image
-                updateSliderHeight(track, activeIndex);
-            });
+            }, { passive: true });
 
             // Click dots to navigate
             dots.forEach(dot => {
@@ -935,21 +945,34 @@ if (isMobile()) {
 
 (function initDrawerGestures() {
     const handle = document.getElementById('panel-handle');
+    const panelContent = panel.querySelector('.panel-content');
     let startY = 0;
     let startHeight = 0;
     let isDragging = false;
+    let wasExpanded = false;
 
-    handle.addEventListener('touchstart', (e) => {
+    // Use touch-action CSS to prevent browser scroll when dragging the handle
+    handle.style.touchAction = 'none';
+
+    handle.addEventListener('pointerdown', (e) => {
         if (!isMobile()) return;
         isDragging = true;
-        startY = e.touches[0].clientY;
+        wasExpanded = panel.classList.contains('panel-expanded');
+        startY = e.clientY;
         startHeight = panel.offsetHeight;
+        handle.setPointerCapture(e.pointerId);
+
+        panel.classList.add('dragging');
         panel.style.transition = 'none';
+        panel.style.minHeight = '0';
+        panel.style.height = startHeight + 'px';
+        // Prevent panel content from scrolling during drag
+        panelContent.style.overflowY = 'hidden';
     });
 
-    document.addEventListener('touchmove', (e) => {
-        if (!isDragging || !isMobile()) return;
-        const dy = startY - e.touches[0].clientY;
+    handle.addEventListener('pointermove', (e) => {
+        if (!isDragging) return;
+        const dy = startY - e.clientY;
         const newHeight = Math.min(
             Math.max(startHeight + dy, 40),
             window.innerHeight * 0.85
@@ -957,28 +980,64 @@ if (isMobile()) {
         panel.style.height = newHeight + 'px';
     });
 
-    document.addEventListener('touchend', () => {
-        if (!isDragging || !isMobile()) return;
-        isDragging = false;
+    function finishDrag() {
+        panel.classList.remove('dragging');
         panel.style.transition = '';
+        panel.style.minHeight = '';
+        panel.style.height = '';
+        panelContent.style.overflowY = '';
+    }
 
+    handle.addEventListener('pointerup', (e) => {
+        if (!isDragging) return;
+        isDragging = false;
+
+        // Read height BEFORE restoring minHeight
         const h = panel.offsetHeight;
         const vh = window.innerHeight;
 
-        if (h < vh * 0.15) {
-            // Dragged very low → hide completely
-            hideDrawer();
-        } else if (h < vh * 0.25) {
-            panel.style.height = '120px';
-            panel.classList.add('drawer-collapsed');
-            panel.classList.remove('drawer-expanded');
-        } else if (h > vh * 0.55) {
-            panel.style.height = '85vh';
-            panel.classList.add('drawer-expanded');
-            panel.classList.remove('drawer-collapsed');
-        } else {
-            panel.style.height = '60vh';
-            panel.classList.remove('drawer-collapsed', 'drawer-expanded');
+        if (wasExpanded) {
+            finishDrag();
+            if (h < startHeight - vh * 0.1) {
+                goBack();
+            }
+            return;
         }
+
+        if (h < vh * 0.15) {
+            // Hide: keep minHeight=0 and small height until transform kicks in
+            panel.classList.remove('dragging');
+            panel.style.transition = '';
+            panelContent.style.overflowY = '';
+            hideDrawer();
+            // Clean up inline styles after hide transition
+            setTimeout(() => {
+                panel.style.minHeight = '';
+                panel.style.height = '';
+            }, 350);
+        } else {
+            finishDrag();
+            if (h < vh * 0.25) {
+                panel.style.height = '120px';
+                panel.classList.add('drawer-collapsed');
+                panel.classList.remove('drawer-expanded');
+            } else if (h > vh * 0.55) {
+                panel.style.height = '85vh';
+                panel.classList.add('drawer-expanded');
+                panel.classList.remove('drawer-collapsed');
+            } else {
+                panel.style.height = '60vh';
+                panel.classList.remove('drawer-collapsed', 'drawer-expanded');
+            }
+        }
+    });
+
+    handle.addEventListener('pointercancel', () => {
+        if (!isDragging) return;
+        isDragging = false;
+        panel.classList.remove('dragging');
+        panel.style.transition = '';
+        panel.style.minHeight = '';
+        panelContent.style.overflowY = '';
     });
 })();
