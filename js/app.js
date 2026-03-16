@@ -111,6 +111,7 @@ map.on('load', async () => {
     addMapLayers();
     bindMapEvents();
     renderAreaList();
+    fitAllAreas();
     hideLoading();
 });
 
@@ -315,6 +316,7 @@ function bindMapEvents() {
         if (areaFeatures.length === 0 && spotFeatures.length === 0) {
             closePopup();
             document.querySelectorAll('.spot-card').forEach(c => c.classList.remove('active'));
+            hideDrawer();
         }
     });
 }
@@ -364,15 +366,40 @@ function closePopup() {
 //  SELECT / NAVIGATE
 // ═══════════════════════════════════
 
+function fitAllAreas(usePanel) {
+    if (!areaData || areaData.features.length === 0) return;
+    const bounds = new mapboxgl.LngLatBounds();
+    areaData.features.forEach(f => bounds.extend(f.geometry.coordinates));
+    map.fitBounds(bounds, {
+        padding: usePanel ? getMapPadding() : { top: 60, left: 60, right: 60, bottom: 60 },
+        maxZoom: PKU_ZOOM,
+        duration: 1200
+    });
+}
+
+function getMapPadding() {
+    if (isMobile()) {
+        const panelH = panel.offsetHeight || window.innerHeight * 0.6;
+        return { top: 100, left: 60, right: 60, bottom: panelH + 60 };
+    } else {
+        const panelW = panel.offsetWidth + 32;
+        return { top: 80, left: panelW + 40, right: 60, bottom: 60 };
+    }
+}
+
 function selectArea(areaId, coords) {
+    showDrawer();
     currentAreaId = areaId;
 
-    // Fly to area
-    map.flyTo({
-        center: coords,
-        zoom: DETAIL_ZOOM,
-        duration: 1200,
-        essential: true
+    // Fit bounds with padding to avoid panel occlusion
+    const spots = spotData.features.filter(f => f.properties.Area_id === areaId);
+    const bounds = new mapboxgl.LngLatBounds();
+    bounds.extend(coords);
+    spots.forEach(f => bounds.extend(f.geometry.coordinates));
+    map.fitBounds(bounds, {
+        padding: getMapPadding(),
+        maxZoom: DETAIL_ZOOM,
+        duration: 1200
     });
 
     // Show spot markers for this area
@@ -403,6 +430,7 @@ function selectArea(areaId, coords) {
 }
 
 function selectSpot(feature) {
+    showDrawer();
     console.log('[PhotoSpot] selectSpot called:', feature.properties.Spot_Name, feature.properties);
     currentSpotFeature = feature;
     const props = feature.properties;
@@ -419,22 +447,33 @@ function selectSpot(feature) {
 
     closePopup();
 
-    // Switch sidebar to Level 3: spot photo detail
-    spotDetail.classList.add('hidden');
-    spotPhotoDetail.classList.remove('hidden');
+    // Fade out Level 2 content, then switch to Level 3
+    spotDetail.classList.add('fading');
     backBtn.classList.remove('hidden');
+    panel.classList.add('panel-expanded');
 
-    renderSpotDetail(feature);
+    setTimeout(() => {
+        spotDetail.classList.add('hidden');
+        spotDetail.classList.remove('fading');
+        spotPhotoDetail.classList.remove('hidden');
+        renderSpotDetail(feature);
+    }, 180);
 }
 
 function goBack() {
     if (currentSpotFeature) {
-        // Level 3 → Level 2: go back to spot list
+        // Level 3 → Level 2: fade out then switch
         currentSpotFeature = null;
         closePopup();
 
-        spotPhotoDetail.classList.add('hidden');
-        spotDetail.classList.remove('hidden');
+        spotPhotoDetail.classList.add('fading');
+        panel.classList.remove('panel-expanded');
+
+        setTimeout(() => {
+            spotPhotoDetail.classList.add('hidden');
+            spotPhotoDetail.classList.remove('fading');
+            spotDetail.classList.remove('hidden');
+        }, 180);
 
         // Fly back to area level
         const area = areaData.features.find(f => f.properties.id === currentAreaId);
@@ -456,17 +495,13 @@ function goBack() {
         hideSpots();
         closePopup();
 
-        map.flyTo({
-            center: PKU_CENTER,
-            zoom: PKU_ZOOM,
-            duration: 1200,
-            essential: true
-        });
+        fitAllAreas(true);
 
         spotDetail.classList.add('hidden');
         spotPhotoDetail.classList.add('hidden');
         areaList.classList.remove('hidden');
         backBtn.classList.add('hidden');
+        panel.classList.remove('panel-expanded');
 
         document.querySelectorAll('.spot-card').forEach(c => c.classList.remove('active'));
     }
@@ -659,6 +694,31 @@ function renderSpotDetail(feature) {
             ` : ''}
         `;
 
+        // Adapt slider height to current image
+        function updateSliderHeight(track, index) {
+            const items = track.querySelectorAll('.gallery-item');
+            if (!items[index]) return;
+            const img = items[index].querySelector('.gallery-image');
+            if (img && img.naturalHeight) {
+                const aspectH = (img.naturalHeight / img.naturalWidth) * track.clientWidth;
+                track.style.height = aspectH + 'px';
+            }
+        }
+
+        // Set initial height once first image loads
+        {
+            const track = document.getElementById('slider-track');
+            const firstImg = track.querySelector('.gallery-image');
+            if (firstImg) {
+                const setInitialHeight = () => updateSliderHeight(track, 0);
+                if (firstImg.complete && firstImg.naturalHeight) {
+                    setInitialHeight();
+                } else {
+                    firstImg.addEventListener('load', setInitialHeight, { once: true });
+                }
+            }
+        }
+
         // Add Event Listeners for slider if there are multiple images
         if (images.length > 1) {
             const track = document.getElementById('slider-track');
@@ -666,7 +726,18 @@ function renderSpotDetail(feature) {
             const leftBtn = document.querySelector('.slider-arrow-left');
             const rightBtn = document.querySelector('.slider-arrow-right');
 
-            // Update dots on scroll
+            // Ensure all images update height when they load
+            track.querySelectorAll('.gallery-image').forEach((img, idx) => {
+                img.addEventListener('load', () => {
+                    // Update height if this is the currently visible image
+                    const activeIndex = Math.round(track.scrollLeft / track.clientWidth);
+                    if (idx === activeIndex) {
+                        updateSliderHeight(track, idx);
+                    }
+                }, { once: true });
+            });
+
+            // Update dots and height on scroll
             track.addEventListener('scroll', () => {
                 const scrollLeft = track.scrollLeft;
                 const itemWidth = track.clientWidth;
@@ -676,6 +747,9 @@ function renderSpotDetail(feature) {
                 dots.forEach((dot, index) => {
                     dot.classList.toggle('active', index === activeIndex);
                 });
+
+                // Adapt height to current image
+                updateSliderHeight(track, activeIndex);
             });
 
             // Click dots to navigate
@@ -754,15 +828,116 @@ backBtn.addEventListener('click', goBack);
 //  MOBILE DRAWER TOUCH SUPPORT
 // ═══════════════════════════════════
 
+// ═══════════════════════════════════
+//  MOBILE DRAWER SHOW / HIDE
+// ═══════════════════════════════════
+
+function isMobile() {
+    return window.innerWidth <= 768;
+}
+
+function showDrawer() {
+    if (!isMobile()) return;
+    panel.classList.remove('drawer-hidden');
+    document.body.classList.remove('drawer-is-hidden');
+    // Show at 3/5 of screen height (60vh)
+    panel.style.height = '60vh';
+    panel.classList.remove('drawer-collapsed', 'drawer-expanded');
+    panel.classList.add('drawer-expanded');
+}
+
+function hideDrawer() {
+    if (!isMobile()) return;
+    panel.classList.add('drawer-hidden');
+    document.body.classList.add('drawer-is-hidden');
+    panel.classList.remove('drawer-collapsed', 'drawer-expanded');
+}
+
+// Start hidden on mobile
+if (isMobile()) {
+    hideDrawer();
+}
+
+// ═══════════════════════════════════
+//  DRAGGABLE FLOATING TOGGLE BALL
+// ═══════════════════════════════════
+
+(function initDraggableBall() {
+    const btn = document.getElementById('drawer-toggle-btn');
+    let isDragging = false;
+    let hasMoved = false;
+    let startX = 0, startY = 0;
+    let btnStartX = 0, btnStartY = 0;
+
+    // ── Touch drag ──
+    btn.addEventListener('touchstart', (e) => {
+        isDragging = true;
+        hasMoved = false;
+        const touch = e.touches[0];
+        startX = touch.clientX;
+        startY = touch.clientY;
+        const rect = btn.getBoundingClientRect();
+        btnStartX = rect.left;
+        btnStartY = rect.top;
+        btn.classList.add('dragging');
+        e.preventDefault(); // prevent ghost clicks
+    });
+
+    document.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        const touch = e.touches[0];
+        const dx = touch.clientX - startX;
+        const dy = touch.clientY - startY;
+
+        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+            hasMoved = true;
+        }
+
+        const newX = Math.max(0, Math.min(btnStartX + dx, window.innerWidth - btn.offsetWidth));
+        const newY = Math.max(0, Math.min(btnStartY + dy, window.innerHeight - btn.offsetHeight));
+
+        btn.style.left = newX + 'px';
+        btn.style.top = newY + 'px';
+        btn.style.bottom = 'auto';
+        btn.style.right = 'auto';
+    }, { passive: true });
+
+    document.addEventListener('touchend', () => {
+        if (!isDragging) return;
+        isDragging = false;
+        btn.classList.remove('dragging');
+
+        // Snap to nearest horizontal edge
+        const rect = btn.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const margin = 16;
+        if (centerX < window.innerWidth / 2) {
+            btn.style.left = margin + 'px';
+        } else {
+            btn.style.left = (window.innerWidth - btn.offsetWidth - margin) + 'px';
+        }
+
+        // If didn't move, treat as tap → show drawer
+        if (!hasMoved) {
+            showDrawer();
+        }
+    });
+
+    // ── Mouse click (DevTools / desktop fallback) ──
+    btn.addEventListener('click', () => {
+        showDrawer();
+    });
+})();
+
+// ═══════════════════════════════════
+//  DRAWER DRAG GESTURES
+// ═══════════════════════════════════
+
 (function initDrawerGestures() {
     const handle = document.getElementById('panel-handle');
     let startY = 0;
     let startHeight = 0;
     let isDragging = false;
-
-    function isMobile() {
-        return window.innerWidth <= 768;
-    }
 
     handle.addEventListener('touchstart', (e) => {
         if (!isMobile()) return;
@@ -776,7 +951,7 @@ backBtn.addEventListener('click', goBack);
         if (!isDragging || !isMobile()) return;
         const dy = startY - e.touches[0].clientY;
         const newHeight = Math.min(
-            Math.max(startHeight + dy, 120),
+            Math.max(startHeight + dy, 40),
             window.innerHeight * 0.85
         );
         panel.style.height = newHeight + 'px';
@@ -790,16 +965,19 @@ backBtn.addEventListener('click', goBack);
         const h = panel.offsetHeight;
         const vh = window.innerHeight;
 
-        if (h < vh * 0.25) {
+        if (h < vh * 0.15) {
+            // Dragged very low → hide completely
+            hideDrawer();
+        } else if (h < vh * 0.25) {
             panel.style.height = '120px';
             panel.classList.add('drawer-collapsed');
             panel.classList.remove('drawer-expanded');
         } else if (h > vh * 0.55) {
-            panel.style.height = '70vh';
+            panel.style.height = '85vh';
             panel.classList.add('drawer-expanded');
             panel.classList.remove('drawer-collapsed');
         } else {
-            panel.style.height = '45vh';
+            panel.style.height = '60vh';
             panel.classList.remove('drawer-collapsed', 'drawer-expanded');
         }
     });
