@@ -86,81 +86,44 @@ const map = new mapboxgl.Map({
 
 map.addControl(new mapboxgl.NavigationControl({ showCompass: true, showZoom: true }), 'top-right');
 
-// ── Custom Geolocate (outside #map for reliable mobile touch) ──
-const geolocateBtn = $('#custom-geolocate');
-let _geoWatchId = null;
-let _geoUserMarker = null;
+// ── Geolocate Control ──
+const geolocateControl = new mapboxgl.GeolocateControl({
+    positionOptions: { enableHighAccuracy: true },
+    trackUserLocation: true,
+    showUserHeading: true
+});
+map.addControl(geolocateControl, 'top-right');
 
-geolocateBtn.addEventListener('click', () => {
-    console.log('[PhotoSpot] 定位按钮被点击');
-    if (isGeolocateActive) {
-        // Turn off
-        stopGeolocate();
+geolocateControl.on('geolocate', (e) => {
+    const pos = [e.coords.longitude, e.coords.latitude];
+    const dist = haversineDistance(pos, PKU_CENTER);
+    console.log('[PhotoSpot] 定位成功:', pos, '距北大', Math.round(dist) + 'm');
+    if (dist > PKU_GEOFENCE_RADIUS) {
+        console.warn('[PhotoSpot] 超出地理围栏');
+        showToast('你不在北京大学附近（' + Math.round(dist) + 'm），无法导航');
+        geolocateControl.trigger();
+        userLocation = null;
+        isGeolocateActive = false;
+        clearRoute();
         return;
     }
-    // Turn on
-    if (!navigator.geolocation) {
-        showToast('你的浏览器不支持定位');
-        return;
+    userLocation = pos;
+    isGeolocateActive = true;
+
+    if (currentRouteData && currentSpotFeature) {
+        console.log('[PhotoSpot] 位置变化，自动刷新路线');
+        fetchAndShowRoute(currentSpotFeature.geometry.coordinates.slice());
     }
-    geolocateBtn.classList.add('searching');
-    console.log('[PhotoSpot] 请求定位权限…');
-
-    _geoWatchId = navigator.geolocation.watchPosition(
-        (pos) => {
-            const coords = [pos.coords.longitude, pos.coords.latitude];
-            const dist = haversineDistance(coords, PKU_CENTER);
-            console.log('[PhotoSpot] 定位成功:', coords, '距北大', Math.round(dist) + 'm');
-
-            if (dist > PKU_GEOFENCE_RADIUS) {
-                console.warn('[PhotoSpot] 超出地理围栏');
-                showToast('你不在北京大学附近（' + Math.round(dist) + 'm），无法导航');
-                stopGeolocate();
-                return;
-            }
-
-            userLocation = coords;
-            isGeolocateActive = true;
-            geolocateBtn.classList.remove('searching');
-            geolocateBtn.classList.add('active');
-            updateUserMarker(coords);
-
-            if (currentRouteData && currentSpotFeature) {
-                console.log('[PhotoSpot] 位置变化，自动刷新路线');
-                fetchAndShowRoute(currentSpotFeature.geometry.coordinates.slice());
-            }
-        },
-        (err) => {
-            console.error('[PhotoSpot] 定位失败:', err.message);
-            showToast('定位失败: ' + err.message);
-            stopGeolocate();
-        },
-        { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
-    );
 });
 
-function stopGeolocate() {
-    console.log('[PhotoSpot] 关闭定位');
-    if (_geoWatchId !== null) {
-        navigator.geolocation.clearWatch(_geoWatchId);
-        _geoWatchId = null;
-    }
-    isGeolocateActive = false;
-    userLocation = null;
-    geolocateBtn.classList.remove('active', 'searching');
-    if (_geoUserMarker) { _geoUserMarker.remove(); _geoUserMarker = null; }
-    clearRoute();
-}
+geolocateControl.on('error', (e) => {
+    console.error('[PhotoSpot] 定位失败:', e.message || e);
+    showToast('定位失败: ' + (e.message || '未知错误'));
+});
 
-function updateUserMarker(coords) {
-    if (!_geoUserMarker) {
-        const el = document.createElement('div');
-        el.className = 'user-location-dot';
-        _geoUserMarker = new mapboxgl.Marker({ element: el }).setLngLat(coords).addTo(map);
-    } else {
-        _geoUserMarker.setLngLat(coords);
-    }
-}
+geolocateControl.on('trackuserlocationend', () => {
+    console.log('[PhotoSpot] trackuserlocationend → 地图不再跟随用户');
+});
 
 map.addControl(new mapboxgl.ScaleControl({ maxWidth: 100 }), 'bottom-right');
 
@@ -466,14 +429,18 @@ function updateMapControls() {
     if (!isMobile()) return;
     const ctrl = document.querySelector('.mapboxgl-ctrl-bottom-right');
     if (!ctrl) return;
+    let bottomVal;
     if (panelHidden) {
-        ctrl.style.bottom = '10px';
+        bottomVal = 10;
     } else {
         // Get visible panel height after transition completes
         const panel = currentLevel === 1 ? areaPanel : bottomPanel;
         const h = panel.offsetHeight || 120;
-        ctrl.style.bottom = (h + 10) + 'px';
+        bottomVal = h + 10;
     }
+    ctrl.style.bottom = bottomVal + 'px';
+    // Move route-info capsule to sit above scale control
+    if (routeInfoEl) routeInfoEl.style.bottom = (bottomVal + 30) + 'px';
 }
 
 // Delayed version that waits for panel transition to finish

@@ -56,47 +56,6 @@ html, body {
 
 #map { position: absolute; inset: 0; z-index: var(--z-map); }
 .mapboxgl-ctrl-logo, .mapboxgl-ctrl-attrib { display: none !important; }
-.mapboxgl-ctrl-geolocate { display: none !important; }
-
-/* ══════════════════════════════════
-   CUSTOM GEOLOCATE BUTTON (outside #map for reliable mobile touch)
-   ══════════════════════════════════ */
-
-.custom-geolocate {
-    position: fixed;
-    top: 168px;
-    right: 16px;
-    z-index: var(--z-switcher);
-    width: 36px;
-    height: 36px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--color-border);
-    background: var(--color-panel);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    color: var(--color-text-secondary);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all var(--transition-fast);
-}
-.custom-geolocate:active {
-    transform: scale(0.92);
-}
-.custom-geolocate.active {
-    color: #34d399;
-    border-color: rgba(52, 211, 153, 0.4);
-    box-shadow: 0 0 8px rgba(52, 211, 153, 0.2);
-}
-.custom-geolocate.searching {
-    color: #34d399;
-    animation: geolocatePulse 1.2s ease infinite;
-}
-@keyframes geolocatePulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-}
 
 /* ══════════════════════════════════
    BRAND BADGE (top-left) — hidden at Level 1 (panel has its own header)
@@ -769,14 +728,13 @@ html, body {
     right: 16px !important;
 }
 
-/* Custom user location dot */
-.user-location-dot {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: #34d399;
-    border: 3px solid rgba(255, 255, 255, 0.9);
-    box-shadow: 0 0 10px rgba(52, 211, 153, 0.5), 0 0 30px rgba(52, 211, 153, 0.2);
+/* Geolocate control — green dot to distinguish from blue area markers */
+.mapboxgl-user-location-accuracy-circle { fill: rgba(52, 211, 153, 0.15); }
+.mapboxgl-user-location-dot { background-color: #34d399; }
+.mapboxgl-user-location-dot::before { background-color: #34d399; }
+
+.mapboxgl-ctrl-geolocate .mapboxgl-ctrl-icon {
+    filter: invert(0.8) !important;
 }
 
 
@@ -930,12 +888,6 @@ html, body {
 
     .style-btn { width: 32px; height: 32px; font-size: 14px; }
 
-    .custom-geolocate {
-        top: max(160px, calc(env(safe-area-inset-top, 10px) + 150px));
-        right: 10px;
-        width: 32px;
-        height: 32px;
-    }
 
     #bottom-panel {
         border-radius: var(--radius-xl) var(--radius-xl) 0 0;
@@ -1038,9 +990,9 @@ html, body {
 
 .route-info {
     position: fixed;
-    top: 16px;
+    bottom: 30px;
     left: 50%;
-    transform: translateX(-50%) translateY(-80px);
+    transform: translateX(-50%) translateY(80px);
     opacity: 0;
     z-index: var(--z-badge);
     background: var(--color-panel);
@@ -1055,16 +1007,13 @@ html, body {
     font-size: 13px;
     font-family: var(--font-sans);
     color: var(--color-text);
-    transition: transform var(--transition-normal), opacity var(--transition-normal);
+    transition: transform var(--transition-normal), opacity var(--transition-normal), bottom 0.2s ease;
     pointer-events: none;
 }
 .route-info.visible {
     transform: translateX(-50%) translateY(0);
     opacity: 1;
     pointer-events: auto;
-}
-@media (max-width: 768px) {
-    .route-info { top: 73px; }
 }
 .route-sep {
     color: var(--color-text-muted);
