@@ -37,7 +37,7 @@ let currentImages = [];
 let userLocation = null;
 let isGeolocateActive = false;
 let currentRouteData = null;
-const PKU_GEOFENCE_RADIUS = 2000; // meters
+const PKU_GEOFENCE_RADIUS = 5000; // meters
 
 // ── DOM Elements ──
 const $ = (sel) => document.querySelector(sel);
@@ -94,13 +94,15 @@ const geolocateControl = new mapboxgl.GeolocateControl({
 });
 map.addControl(geolocateControl, 'top-right');
 
-// ── Geofence: check if user is near PKU ──
+// ── Geolocation event logging ──
 geolocateControl.on('geolocate', (e) => {
     const pos = [e.coords.longitude, e.coords.latitude];
     const dist = haversineDistance(pos, PKU_CENTER);
+    console.log('[PhotoSpot] 定位成功:', pos, '距北大', Math.round(dist) + 'm');
     if (dist > PKU_GEOFENCE_RADIUS) {
-        showToast('你不在北京大学附近，无法使用定位导航功能');
-        geolocateControl.trigger(); // toggle off
+        console.warn('[PhotoSpot] 超出地理围栏 (' + PKU_GEOFENCE_RADIUS + 'm)，关闭定位');
+        showToast('你不在北京大学附近（' + Math.round(dist) + 'm），无法导航');
+        geolocateControl.trigger();
         userLocation = null;
         isGeolocateActive = false;
         clearRoute();
@@ -108,19 +110,29 @@ geolocateControl.on('geolocate', (e) => {
     }
     userLocation = pos;
     isGeolocateActive = true;
-    console.log('[PhotoSpot] 定位更新:', pos);
 
-    // Auto-update route when user position changes and a route is active
     if (currentRouteData && currentSpotFeature) {
         console.log('[PhotoSpot] 位置变化，自动刷新路线');
         fetchAndShowRoute(currentSpotFeature.geometry.coordinates.slice());
     }
 });
 
+geolocateControl.on('error', (e) => {
+    console.error('[PhotoSpot] 定位失败:', e.message || e);
+    showToast('定位失败: ' + (e.message || '未知错误'));
+});
+
+geolocateControl.on('trackuserlocationstart', () => {
+    console.log('[PhotoSpot] 定位开始跟踪');
+});
+
 geolocateControl.on('trackuserlocationend', () => {
-    console.log('[PhotoSpot] trackuserlocationend → 地图不再跟随用户（定位仍在运行）');
-    // flyTo triggers this event but geolocation is still running.
-    // Don't clear anything — route will be managed by selectSpot / goBack.
+    console.log('[PhotoSpot] trackuserlocationend → 地图不再跟随用户');
+});
+
+// Log geolocate button click
+document.querySelector('.mapboxgl-ctrl-geolocate')?.addEventListener('click', () => {
+    console.log('[PhotoSpot] 定位按钮被点击');
 });
 
 map.addControl(new mapboxgl.ScaleControl({ maxWidth: 100 }), 'bottom-right');
