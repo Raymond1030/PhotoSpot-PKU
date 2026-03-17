@@ -827,6 +827,8 @@ html, body {
    ══════════════════════════════════ */
 
 @media (max-width: 768px) {
+    .route-info { top: 130px; }
+
     /* Area panel becomes bottom drawer on mobile */
     #area-panel {
         position: fixed;
@@ -949,4 +951,68 @@ html, body {
 
 @media (hover: none) {
     .exif-overlay { opacity: 1; }
+}
+
+/* ═══════════════════════════════════
+   TOAST NOTIFICATION
+   ═══════════════════════════════════ */
+
+.toast {
+    position: fixed;
+    top: 60px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-80px);
+    z-index: 1500;
+    background: var(--color-panel-solid);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    padding: 10px 20px;
+    font-size: 13px;
+    font-family: var(--font-sans);
+    color: var(--color-text);
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    opacity: 0;
+    pointer-events: none;
+    white-space: nowrap;
+    max-width: 90vw;
+    text-align: center;
+}
+.toast.visible {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+
+/* ═══════════════════════════════════
+   ROUTE INFO OVERLAY
+   ═══════════════════════════════════ */
+
+.route-info {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-80px);
+    opacity: 0;
+    z-index: var(--z-badge);
+    background: var(--color-panel);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-family: var(--font-sans);
+    color: var(--color-text);
+    transition: transform var(--transition-normal), opacity var(--transition-normal);
+    pointer-events: none;
+}
+.route-info.visible {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+.route-sep {
+    color: var(--color-text-muted);
 }

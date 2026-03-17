@@ -33,6 +33,12 @@ let currentStyle = 'dark';
 let currentPhotoIndex = 0;
 let currentImages = [];
 
+// ── Geolocation & Routing State ──
+let userLocation = null;
+let isGeolocateActive = false;
+let currentRouteData = null;
+const PKU_GEOFENCE_RADIUS = 2000; // meters
+
 // ── DOM Elements ──
 const $ = (sel) => document.querySelector(sel);
 const areaPanel = $('#area-panel');
@@ -60,6 +66,10 @@ const lightboxSpotName = $('#lightbox-spot-name');
 const lightboxSpotArea = $('#lightbox-spot-area');
 const floatBtn = $('#float-btn');
 const floatBtnIcon = $('#float-btn-icon');
+const toastEl = $('#toast');
+const routeInfoEl = $('#route-info');
+const routeDistanceEl = $('#route-distance');
+const routeDurationEl = $('#route-duration');
 
 // ── Initialize Map ──
 const map = new mapboxgl.Map({
@@ -84,7 +94,139 @@ const geolocateControl = new mapboxgl.GeolocateControl({
 });
 map.addControl(geolocateControl, 'top-right');
 
+// ── Geofence: check if user is near PKU ──
+geolocateControl.on('geolocate', (e) => {
+    const pos = [e.coords.longitude, e.coords.latitude];
+    const dist = haversineDistance(pos, PKU_CENTER);
+    if (dist > PKU_GEOFENCE_RADIUS) {
+        showToast('你不在北京大学附近，无法使用定位导航功能');
+        geolocateControl.trigger(); // toggle off
+        userLocation = null;
+        isGeolocateActive = false;
+        clearRoute();
+        return;
+    }
+    userLocation = pos;
+    isGeolocateActive = true;
+    console.log('[PhotoSpot] 定位更新:', pos);
+
+    // Auto-update route when user position changes and a route is active
+    if (currentRouteData && currentSpotFeature) {
+        console.log('[PhotoSpot] 位置变化，自动刷新路线');
+        fetchAndShowRoute(currentSpotFeature.geometry.coordinates.slice());
+    }
+});
+
+geolocateControl.on('trackuserlocationend', () => {
+    console.log('[PhotoSpot] trackuserlocationend → 地图不再跟随用户（定位仍在运行）');
+    // flyTo triggers this event but geolocation is still running.
+    // Don't clear anything — route will be managed by selectSpot / goBack.
+});
+
 map.addControl(new mapboxgl.ScaleControl({ maxWidth: 100 }), 'bottom-right');
+
+// ═══════════════════════════════════
+//  UTILITIES
+// ═══════════════════════════════════
+
+let _toastTimer = null;
+function showToast(message, duration = 3000) {
+    clearTimeout(_toastTimer);
+    toastEl.textContent = message;
+    toastEl.classList.add('visible');
+    _toastTimer = setTimeout(() => toastEl.classList.remove('visible'), duration);
+}
+
+function haversineDistance(c1, c2) {
+    const R = 6371000;
+    const toRad = (d) => d * Math.PI / 180;
+    const dLat = toRad(c2[1] - c1[1]);
+    const dLon = toRad(c2[0] - c1[0]);
+    const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(toRad(c1[1])) * Math.cos(toRad(c2[1])) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ═══════════════════════════════════
+//  ROUTING
+// ═══════════════════════════════════
+
+async function fetchAndShowRoute(destination) {
+    if (!userLocation || !isGeolocateActive) {
+        console.warn('[PhotoSpot] fetchAndShowRoute 跳过: userLocation=', userLocation, 'isGeolocateActive=', isGeolocateActive);
+        return;
+    }
+    console.log('[PhotoSpot] 请求路线:', userLocation, '→', destination);
+    const url = `https://api.mapbox.com/directions/v5/mapbox/walking/${userLocation[0]},${userLocation[1]};${destination[0]},${destination[1]}?geometries=geojson&access_token=${mapboxgl.accessToken}`;
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!data.routes || data.routes.length === 0) {
+            console.warn('[PhotoSpot] API 返回无路线');
+            showToast('无法获取步行路线');
+            return;
+        }
+        const route = data.routes[0];
+        const dist = route.distance >= 1000 ? (route.distance / 1000).toFixed(1) + 'km' : Math.round(route.distance) + 'm';
+        console.log('[PhotoSpot] 路线获取成功: 距离', dist, '耗时约', Math.ceil(route.duration / 60), '分钟');
+        currentRouteData = route.geometry;
+        drawRouteOnMap(route.geometry);
+        showRouteInfo(route.distance, route.duration);
+    } catch (err) {
+        console.error('[PhotoSpot] 路线请求失败:', err);
+        showToast('路线获取失败');
+    }
+}
+
+function drawRouteOnMap(geometry) {
+    clearRouteLayer();
+    map.addSource('route', {
+        type: 'geojson',
+        data: { type: 'Feature', geometry }
+    });
+    map.addLayer({
+        id: 'route-line-casing',
+        type: 'line',
+        source: 'route',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#000000', 'line-width': 8, 'line-opacity': 0.4 }
+    }, getFirstAreaLayer());
+    map.addLayer({
+        id: 'route-line',
+        type: 'line',
+        source: 'route',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#34d399', 'line-width': 5, 'line-opacity': 0.85 }
+    }, getFirstAreaLayer());
+}
+
+function getFirstAreaLayer() {
+    // Insert route below area layers so it doesn't cover markers
+    return map.getLayer('area-glow') ? 'area-glow' : undefined;
+}
+
+function showRouteInfo(distMeters, durSeconds) {
+    const dist = distMeters >= 1000
+        ? (distMeters / 1000).toFixed(1) + ' km'
+        : Math.round(distMeters) + ' m';
+    const mins = Math.ceil(durSeconds / 60);
+    routeDistanceEl.textContent = '步行 ' + dist;
+    routeDurationEl.textContent = '约 ' + mins + ' 分钟';
+    routeInfoEl.classList.add('visible');
+}
+
+function clearRoute() {
+    console.log('[PhotoSpot] 清除路线');
+    currentRouteData = null;
+    clearRouteLayer();
+    if (routeInfoEl) routeInfoEl.classList.remove('visible');
+}
+
+function clearRouteLayer() {
+    if (map.getLayer('route-line')) map.removeLayer('route-line');
+    if (map.getLayer('route-line-casing')) map.removeLayer('route-line-casing');
+    if (map.getSource('route')) map.removeSource('route');
+}
 
 // ═══════════════════════════════════
 //  DATA LOADING
@@ -330,6 +472,7 @@ function resetAreaHighlight() {
 }
 
 function selectArea(areaId, coords) {
+    clearRoute();
     currentLevel = 2;
     currentAreaId = areaId;
     currentSpotFeature = null;
@@ -374,11 +517,21 @@ function selectSpot(feature) {
     currentSpotFeature = feature;
     resetFloatBtn();
     const coords = feature.geometry.coordinates.slice();
+    console.log('[PhotoSpot] selectSpot:', feature.properties.Spot_Name, coords);
 
     // Ensure bottom panel is visible
     bottomPanel.classList.remove('panel-hidden');
 
     map.flyTo({ center: coords, zoom: 18.5, duration: 800, essential: true });
+
+    // Auto-route only if user has already enabled geolocation
+    console.log('[PhotoSpot] 定位状态: isGeolocateActive=', isGeolocateActive, 'userLocation=', userLocation);
+    if (isGeolocateActive && userLocation) {
+        console.log('[PhotoSpot] 已有定位，自动规划路线');
+        fetchAndShowRoute(coords);
+    } else {
+        console.log('[PhotoSpot] 未开启定位，跳过路线规划');
+    }
 
     renderPhotoDetail(feature);
     switchBottomSection(photoDetail);
@@ -391,6 +544,7 @@ function selectSpot(feature) {
 }
 
 function goBack() {
+    clearRoute();
     resetFloatBtn();
     if (currentLevel === 3) {
         currentLevel = 2;
@@ -738,6 +892,7 @@ map.on('style.load', () => {
     addMapLayers();
     bindMapEvents();
     if (currentAreaId) showSpotsForArea(currentAreaId);
+    if (currentRouteData) drawRouteOnMap(currentRouteData);
 });
 
 // ═══════════════════════════════════
