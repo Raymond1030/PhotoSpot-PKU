@@ -70,6 +70,8 @@ const toastEl = $('#toast');
 const routeInfoEl = $('#route-info');
 const routeDistanceEl = $('#route-distance');
 const routeDurationEl = $('#route-duration');
+const searchInput = $('#search-input');
+const searchClear = $('#search-clear');
 
 // ── Initialize Map ──
 const map = new mapboxgl.Map({
@@ -583,6 +585,9 @@ function goBack() {
         bottomPanel.classList.add('panel-hidden');
         brandBadge.classList.remove('visible');
 
+        // Clear any active search
+        clearSearch();
+
         setTimeout(() => fitAllAreas(), 50);
         updateBackButton();
         updateMapControlsAfterTransition();
@@ -666,6 +671,119 @@ function renderAreaList() {
         });
     });
 }
+
+// ═══════════════════════════════════
+//  SEARCH
+// ═══════════════════════════════════
+
+function performSearch(query) {
+    const q = query.trim().toLowerCase();
+
+    if (!q) {
+        clearSearch();
+        return;
+    }
+
+    searchClear.classList.remove('hidden');
+
+    const areaResults = areaData.features
+        .filter(f => f.properties.Area_Name.toLowerCase().includes(q))
+        .map(f => ({ type: 'area', feature: f }));
+
+    const spotResults = spotData.features
+        .filter(f => f.properties.Spot_Name.toLowerCase().includes(q))
+        .map(f => ({ type: 'spot', feature: f }));
+
+    const results = [...areaResults, ...spotResults].slice(0, 20);
+
+    renderSearchResults(results, q);
+}
+
+function renderSearchResults(results, query) {
+    if (results.length === 0) {
+        areasContainer.innerHTML = `
+            <div class="search-empty">
+                <div class="search-empty-icon">🔍</div>
+                <div>没有找到相关结果</div>
+            </div>`;
+        return;
+    }
+
+    areasContainer.innerHTML = results.map(r => {
+        const p = r.feature.properties;
+        if (r.type === 'area') {
+            const spotCount = spotData.features.filter(f => f.properties.Area_id === p.id).length;
+            const name = highlightMatch(p.Area_Name, query);
+            return `<div class="search-result" data-type="area" data-area-id="${p.id}"
+                         data-lng="${r.feature.geometry.coordinates[0]}" data-lat="${r.feature.geometry.coordinates[1]}">
+                        <div class="search-result-icon area">📍</div>
+                        <div class="search-result-info">
+                            <div class="search-result-name">${name}</div>
+                            <div class="search-result-meta">区域 · ${spotCount} 个机位</div>
+                        </div>
+                        <div class="search-result-arrow">›</div>
+                    </div>`;
+        } else {
+            const areaName = p.Area_Name || '';
+            const name = highlightMatch(p.Spot_Name, query);
+            return `<div class="search-result" data-type="spot" data-area-id="${p.Area_id}" data-spot-id="${p.Spot_id}"
+                         data-lng="${r.feature.geometry.coordinates[0]}" data-lat="${r.feature.geometry.coordinates[1]}">
+                        <div class="search-result-icon spot">📷</div>
+                        <div class="search-result-info">
+                            <div class="search-result-name">${name}</div>
+                            <div class="search-result-meta">机位 · ${areaName}</div>
+                        </div>
+                        <div class="search-result-arrow">›</div>
+                    </div>`;
+        }
+    }).join('');
+
+    areasContainer.querySelectorAll('.search-result').forEach(el => {
+        el.addEventListener('click', () => {
+            const type = el.dataset.type;
+            const areaId = parseInt(el.dataset.areaId);
+            const coords = [parseFloat(el.dataset.lng), parseFloat(el.dataset.lat)];
+
+            searchInput.value = '';
+            searchClear.classList.add('hidden');
+
+            if (type === 'area') {
+                selectArea(areaId, coords);
+            } else {
+                const spotId = parseInt(el.dataset.spotId);
+                const spotFeature = spotData.features.find(f => f.properties.Spot_id === spotId);
+                if (spotFeature) {
+                    selectArea(areaId, coords);
+                    setTimeout(() => selectSpot(spotFeature), 300);
+                }
+            }
+        });
+    });
+}
+
+function highlightMatch(text, query) {
+    const idx = text.toLowerCase().indexOf(query.toLowerCase());
+    if (idx === -1) return text;
+    const before = text.slice(0, idx);
+    const match = text.slice(idx, idx + query.length);
+    const after = text.slice(idx + query.length);
+    return `${before}<mark>${match}</mark>${after}`;
+}
+
+function clearSearch() {
+    searchInput.value = '';
+    searchClear.classList.add('hidden');
+    renderAreaList();
+}
+
+searchInput.addEventListener('input', (e) => {
+    performSearch(e.target.value);
+});
+
+searchClear.addEventListener('click', () => {
+    clearSearch();
+    searchInput.focus();
+});
 
 // ═══════════════════════════════════
 //  RENDER: SPOT CARDS (Level 2)
