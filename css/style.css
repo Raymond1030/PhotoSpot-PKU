@@ -637,7 +637,7 @@ html, body {
 }
 
 #bottom-panel.panel-collapsed {
-    transform: translateY(calc(100% - 48px));
+    transform: translateY(calc(100% - 100px));
 }
 
 #bottom-panel.panel-collapsed .route-plan-header {
@@ -646,8 +646,16 @@ html, body {
 
 #bottom-panel.panel-collapsed .route-waypoint-list,
 #bottom-panel.panel-collapsed .route-start-indicator,
-#bottom-panel.panel-collapsed .route-actions,
+#bottom-panel.panel-collapsed .route-actions {
+    display: none;
+}
+
 #bottom-panel.panel-collapsed .route-summary {
+    border-top: none;
+    padding-top: 0;
+}
+
+#bottom-panel.panel-collapsed .route-summary-actions {
     display: none;
 }
 
