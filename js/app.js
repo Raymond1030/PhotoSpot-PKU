@@ -32,12 +32,27 @@ let currentSpotFeature = null;
 let currentStyle = 'dark';
 let currentPhotoIndex = 0;
 let currentImages = [];
+let currentCategoryFilter = 'all'; // 'all', '风光', '人像'
 
 // ── Geolocation & Routing State ──
 let userLocation = null;
 let isGeolocateActive = false;
 let currentRouteData = null;
 const PKU_GEOFENCE_RADIUS = 5000; // meters
+
+// ── Route Planning State ──
+const MAX_WAYPOINTS = 24;
+let routePlanMode = false;
+let routeWaypoints = [];        // [{key, feature}], key = "{Area_id}-{Spot_id}", order = array index
+let routeGeometry = null;
+let routeTotalDistance = 0;
+let routeTotalDuration = 0;
+let _routeDebounceTimer = null;
+
+function spotKey(feature) {
+    const p = feature.properties;
+    return p.Area_id + '-' + p.Spot_id;
+}
 
 // ── DOM Elements ──
 const $ = (sel) => document.querySelector(sel);
@@ -72,6 +87,31 @@ const routeDistanceEl = $('#route-distance');
 const routeDurationEl = $('#route-duration');
 const searchInput = $('#search-input');
 const searchClear = $('#search-clear');
+const shareBtn = $('#share-btn');
+const categoryFilter = $('#category-filter');
+const spotCategoryFilter = $('#spot-category-filter');
+const routePlan = $('#route-plan');
+const routePlanCount = $('#route-plan-count');
+const routeWaypointListEl = $('#route-waypoint-list');
+const routeStartIndicator = $('#route-start-indicator');
+const routeStartText = document.querySelector('.route-start-text');
+const routeSummary = $('#route-summary');
+const routeSummaryDistance = $('#route-summary-distance');
+const routeSummaryDuration = $('#route-summary-duration');
+const routeSummarySpots = $('#route-summary-spots');
+const routeAddBtn = $('#route-add-btn');
+const routeSortBtn = $('#route-sort-btn');
+const routeViewBtn = $('#route-view-btn');
+const routeShareBtnRoute = $('#route-share-btn-route');
+const routeClearBtn = $('#route-clear-btn');
+const spotPicker = $('#spot-picker');
+const spotPickerInput = $('#spot-picker-input');
+const spotPickerList = $('#spot-picker-list');
+const spotPickerClose = $('#spot-picker-close');
+const routeShareModal = $('#route-share-modal');
+const routeShareLink = $('#route-share-link');
+const routeShareImage = $('#route-share-image');
+const routeShareCancel = $('#route-share-cancel');
 
 // ── Initialize Map ──
 const map = new mapboxgl.Map({
@@ -83,7 +123,8 @@ const map = new mapboxgl.Map({
     bearing: 0,
     minZoom: 13,
     maxZoom: 20,
-    attributionControl: false
+    attributionControl: false,
+    preserveDrawingBuffer: true
 });
 
 map.addControl(new mapboxgl.NavigationControl({ showCompass: true, showZoom: true }), 'top-right');
@@ -149,6 +190,50 @@ function haversineDistance(c1, c2) {
     const a = Math.sin(dLat / 2) ** 2 +
               Math.cos(toRad(c1[1])) * Math.cos(toRad(c2[1])) * Math.sin(dLon / 2) ** 2;
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ── URL State & Share ──
+function updateURL() {
+    const params = new URLSearchParams();
+    if (currentAreaId != null) params.set('area', currentAreaId);
+    if (currentSpotFeature) params.set('spot', currentSpotFeature.properties.Spot_id);
+    const qs = params.toString();
+    const url = qs ? `${location.pathname}?${qs}` : location.pathname;
+    history.replaceState(null, '', url);
+}
+
+shareBtn.addEventListener('click', async () => {
+    const url = location.href;
+    const area = areaData.features.find(f => f.properties.id === currentAreaId);
+    const title = area ? area.properties.Area_Name + ' - PhotoSpot PKU' : 'PhotoSpot PKU';
+    if (navigator.share) {
+        try {
+            await navigator.share({ title, url });
+        } catch (e) { /* user cancelled */ }
+    } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(url);
+        showToast('链接已复制到剪贴板');
+    }
+});
+
+function handleURLParams() {
+    const params = new URLSearchParams(location.search);
+    const areaId = params.get('area') ? parseInt(params.get('area')) : null;
+    const spotId = params.get('spot') ? parseInt(params.get('spot')) : null;
+
+    if (areaId == null) return;
+
+    const area = areaData.features.find(f => f.properties.id === areaId);
+    if (!area) return;
+
+    selectArea(areaId, area.geometry.coordinates);
+
+    if (spotId != null) {
+        const spotFeature = spotData.features.find(f => f.properties.Spot_id === spotId);
+        if (spotFeature) {
+            setTimeout(() => selectSpot(spotFeature), 400);
+        }
+    }
 }
 
 // ═══════════════════════════════════
@@ -518,6 +603,7 @@ function selectArea(areaId, coords) {
     document.querySelectorAll('.area-card').forEach(c => {
         c.classList.toggle('active', parseInt(c.dataset.areaId) === areaId);
     });
+    updateURL();
 }
 
 function selectSpot(feature) {
@@ -549,6 +635,7 @@ function selectSpot(feature) {
     document.querySelectorAll('.spot-card').forEach(c => {
         c.classList.toggle('active', parseInt(c.dataset.spotId) === feature.properties.Spot_id);
     });
+    updateURL();
 }
 
 function goBack() {
@@ -573,6 +660,7 @@ function goBack() {
         }
 
         document.querySelectorAll('.spot-card').forEach(c => c.classList.remove('active'));
+        updateURL();
     } else if (currentLevel === 2) {
         currentLevel = 1;
         currentAreaId = null;
@@ -593,6 +681,7 @@ function goBack() {
         updateMapControlsAfterTransition();
 
         document.querySelectorAll('.area-card').forEach(c => c.classList.remove('active'));
+        updateURL();
     }
 }
 
@@ -627,6 +716,62 @@ function updateBackButton() {
 }
 
 // ═══════════════════════════════════
+//  CATEGORY FILTER
+// ═══════════════════════════════════
+
+function spotMatchesCategory(spotFeature, category) {
+    if (category === 'all') return true;
+    const cat = spotFeature.properties.Category || '';
+    return cat.includes(category);
+}
+
+function getAreaCategories(areaId) {
+    const spots = spotData.features.filter(f => f.properties.Area_id === areaId);
+    const cats = new Set();
+    spots.forEach(f => {
+        const cat = f.properties.Category || '';
+        cat.split('|').forEach(c => { if (c) cats.add(c); });
+    });
+    return cats;
+}
+
+function renderCategoryTags(categories) {
+    const tags = [];
+    if (categories.has('风光')) tags.push('<span class="cat-tag cat-landscape">🏔️ 风光</span>');
+    if (categories.has('人像')) tags.push('<span class="cat-tag cat-portrait">🧑 人像</span>');
+    return tags.join('');
+}
+
+function renderSpotCategoryTag(spotFeature) {
+    const cat = spotFeature.properties.Category || '';
+    const tags = [];
+    if (cat.includes('风光')) tags.push('<span class="cat-tag cat-landscape">🏔️ 风光</span>');
+    if (cat.includes('人像')) tags.push('<span class="cat-tag cat-portrait">🧑 人像</span>');
+    return tags.join('');
+}
+
+function initCategoryFilter(containerEl, onChange) {
+    containerEl.addEventListener('click', (e) => {
+        const pill = e.target.closest('.filter-pill');
+        if (!pill) return;
+        containerEl.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        currentCategoryFilter = pill.dataset.category;
+        onChange(currentCategoryFilter);
+    });
+}
+
+// Sync both filter UIs
+function syncFilterPills(category) {
+    [categoryFilter, spotCategoryFilter].forEach(container => {
+        if (!container) return;
+        container.querySelectorAll('.filter-pill').forEach(p => {
+            p.classList.toggle('active', p.dataset.category === category);
+        });
+    });
+}
+
+// ═══════════════════════════════════
 //  RENDER: AREA LIST (Level 1)
 // ═══════════════════════════════════
 
@@ -637,11 +782,22 @@ function renderAreaList() {
         return (b.properties.Key_Area || 0) - (a.properties.Key_Area || 0);
     });
 
-    areasContainer.innerHTML = sorted.map((feature, idx) => {
+    // Filter areas: show only areas that have spots matching the category
+    const filtered = currentCategoryFilter === 'all' ? sorted : sorted.filter(feature => {
+        const areaId = feature.properties.id;
+        return spotData.features.some(f => f.properties.Area_id === areaId && spotMatchesCategory(f, currentCategoryFilter));
+    });
+
+    areasContainer.innerHTML = filtered.map((feature, idx) => {
         const p = feature.properties;
         const coords = feature.geometry.coordinates;
-        const spotCount = spotData.features.filter(f => f.properties.Area_id === p.id).length;
+        const allSpots = spotData.features.filter(f => f.properties.Area_id === p.id);
+        const matchingSpots = currentCategoryFilter === 'all'
+            ? allSpots
+            : allSpots.filter(f => spotMatchesCategory(f, currentCategoryFilter));
+        const spotCount = matchingSpots.length;
         const coverSrc = getAreaCover(p.id);
+        const areaCats = getAreaCategories(p.id);
 
         return `<div class="area-card card-stagger" data-area-id="${p.id}"
                      data-lng="${coords[0]}" data-lat="${coords[1]}"
@@ -657,6 +813,7 @@ function renderAreaList() {
                         ${p.Des ? `<div class="area-card-desc">${p.Des}</div>` : ''}
                         <div class="area-card-meta">
                             ${spotCount > 0 ? `📍 ${spotCount} 个机位` : ''}
+                            <span class="area-card-cats">${renderCategoryTags(areaCats)}</span>
                         </div>
                     </div>
                     <div class="area-card-arrow">›</div>
@@ -691,7 +848,7 @@ function performSearch(query) {
         .map(f => ({ type: 'area', feature: f }));
 
     const spotResults = spotData.features
-        .filter(f => f.properties.Spot_Name.toLowerCase().includes(q))
+        .filter(f => f.properties.Spot_Name.toLowerCase().includes(q) && spotMatchesCategory(f, currentCategoryFilter))
         .map(f => ({ type: 'spot', feature: f }));
 
     const results = [...areaResults, ...spotResults].slice(0, 20);
@@ -731,7 +888,7 @@ function renderSearchResults(results, query) {
                         <div class="search-result-icon spot">📷</div>
                         <div class="search-result-info">
                             <div class="search-result-name">${name}</div>
-                            <div class="search-result-meta">机位 · ${areaName}</div>
+                            <div class="search-result-meta">机位 · ${areaName} ${renderSpotCategoryTag(r.feature)}</div>
                         </div>
                         <div class="search-result-arrow">›</div>
                     </div>`;
@@ -790,14 +947,17 @@ searchClear.addEventListener('click', () => {
 // ═══════════════════════════════════
 
 function renderSpotCards(areaId) {
-    const spots = spotData.features.filter(f => f.properties.Area_id === areaId);
+    const allSpots = spotData.features.filter(f => f.properties.Area_id === areaId);
+    const spots = currentCategoryFilter === 'all'
+        ? allSpots
+        : allSpots.filter(f => spotMatchesCategory(f, currentCategoryFilter));
     const area = areaData.features.find(f => f.properties.id === areaId);
 
     spotCardsTitle.textContent = area ? area.properties.Area_Name : '';
     spotCardsCount.textContent = `${spots.length} 个机位`;
 
     if (spots.length === 0) {
-        cardsContainer.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🔭</div><div class="empty-state-text">暂无详细机位数据<br>更多内容即将上线</div></div>`;
+        cardsContainer.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🔭</div><div class="empty-state-text">${currentCategoryFilter !== 'all' ? '当前分类下暂无机位' : '暂无详细机位数据'}<br>更多内容即将上线</div></div>`;
         return;
     }
 
@@ -819,7 +979,10 @@ function renderSpotCards(areaId) {
                         : `<div class="spot-card-no-cover">${isKey ? '⭐' : '📷'}</div>`}
                     <div class="spot-card-body">
                         <div class="spot-card-name">${p.Spot_Name}</div>
-                        <div class="spot-card-meta">${images.length > 0 ? images.length + ' 张照片' : '暂无照片'}</div>
+                        <div class="spot-card-meta">
+                            ${images.length > 0 ? images.length + ' 张照片' : '暂无照片'}
+                            <span class="spot-card-cats">${renderSpotCategoryTag(feature)}</span>
+                        </div>
                     </div>
                 </div>`;
     }).join('');
@@ -827,7 +990,7 @@ function renderSpotCards(areaId) {
     cardsContainer.querySelectorAll('.spot-card').forEach(card => {
         card.addEventListener('click', () => {
             const spotId = parseInt(card.dataset.spotId);
-            const spot = spots.find(f => f.properties.Spot_id === spotId);
+            const spot = allSpots.find(f => f.properties.Spot_id === spotId);
             if (spot) selectSpot(spot);
         });
     });
@@ -1202,6 +1365,24 @@ floatBtn.addEventListener('click', () => {
 })();
 
 // ═══════════════════════════════════
+//  CATEGORY FILTER EVENTS
+// ═══════════════════════════════════
+
+initCategoryFilter(categoryFilter, (cat) => {
+    syncFilterPills(cat);
+    if (currentLevel === 1) {
+        renderAreaList();
+    }
+});
+
+initCategoryFilter(spotCategoryFilter, (cat) => {
+    syncFilterPills(cat);
+    if (currentLevel === 2 && currentAreaId != null) {
+        renderSpotCards(currentAreaId);
+    }
+});
+
+// ═══════════════════════════════════
 //  LOADING & INIT
 // ═══════════════════════════════════
 
@@ -1228,4 +1409,7 @@ map.on('load', async () => {
     fitAllAreas();
     hideLoading();
     updateMapControlsAfterTransition();
+
+    // Handle URL parameters (e.g. ?area=2&spot=5)
+    handleURLParams();
 });
