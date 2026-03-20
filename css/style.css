@@ -1533,16 +1533,28 @@ html, body {
    ═══════════════════════════════════ */
 
 .spot-picker {
-    position: absolute;
-    inset: 0;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60vh;
+    max-height: 600px;
     background: var(--color-panel-solid);
-    z-index: 50;
+    z-index: calc(var(--z-panel) + 5);
     display: flex;
     flex-direction: column;
-    transition: opacity var(--transition-fast);
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    border-top: 1px solid var(--color-border);
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.4);
+    transition: transform var(--transition-normal), opacity var(--transition-fast);
+    transform: translateY(0);
 }
 
-.spot-picker.hidden { display: none; }
+.spot-picker.hidden {
+    transform: translateY(100%);
+    pointer-events: none;
+    opacity: 0;
+}
 
 .spot-picker-header {
     display: flex;
@@ -1756,5 +1768,10 @@ html, body {
     .route-share-modal-content {
         max-width: 100%;
         padding-bottom: calc(24px + env(safe-area-inset-bottom));
+    }
+
+    .spot-picker {
+        height: 80vh;
+        max-height: none;
     }
 }
