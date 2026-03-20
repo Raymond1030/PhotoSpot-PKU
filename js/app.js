@@ -901,7 +901,7 @@ function renderSpotPickerList(query) {
             const selected = isSpotInRoute(key);
             html += `<div class="spot-picker-item ${selected ? 'selected' : ''}" data-key="${key}">
                 <div class="spot-picker-check">${selected ? '✓' : ''}</div>
-                <div class="spot-picker-item-name">${p.Spot_Name}</div>
+                <div class="spot-picker-item-name">${p.Spot_Name}${p.Key_Spot === 1 ? ' <span class="spot-picker-key">⭐</span>' : ''}</div>
             </div>`;
         });
     });

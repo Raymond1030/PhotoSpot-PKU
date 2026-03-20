@@ -1726,6 +1726,11 @@ html, body {
     color: var(--color-accent);
 }
 
+.spot-picker-key {
+    font-size: 11px;
+    margin-left: 4px;
+}
+
 /* ═══════════════════════════════════
    ROUTE SHARE MODAL
    ═══════════════════════════════════ */
