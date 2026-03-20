@@ -620,28 +620,27 @@ async function requestMultiRoute() {
 // ── Route Waypoint Markers on Map ──
 
 function generateMarkerImage(number) {
-    const size = 28;
+    const size = 56; // retina size
     const canvas = document.createElement('canvas');
-    canvas.width = size * 2;
-    canvas.height = size * 2;
+    canvas.width = size;
+    canvas.height = size;
     const ctx = canvas.getContext('2d');
-    ctx.scale(2, 2);
 
     ctx.beginPath();
-    ctx.arc(size / 2, size / 2, size / 2 - 1, 0, Math.PI * 2);
+    ctx.arc(size / 2, size / 2, size / 2 - 2, 0, Math.PI * 2);
     ctx.fillStyle = '#38bdf8';
     ctx.fill();
     ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 3;
     ctx.stroke();
 
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 13px Inter, sans-serif';
+    ctx.font = 'bold 26px Inter, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(String(number), size / 2, size / 2);
 
-    return canvas;
+    return { width: size, height: size, data: ctx.getImageData(0, 0, size, size).data };
 }
 
 function updateRouteMarkers() {
@@ -651,8 +650,8 @@ function updateRouteMarkers() {
     routeWaypoints.forEach((w, idx) => {
         const imgName = 'route-marker-' + (idx + 1);
         if (map.hasImage(imgName)) map.removeImage(imgName);
-        const canvas = generateMarkerImage(idx + 1);
-        map.addImage(imgName, canvas, { pixelRatio: 2 });
+        const imgData = generateMarkerImage(idx + 1);
+        map.addImage(imgName, imgData, { pixelRatio: 2 });
     });
 
     const features = routeWaypoints.map((w, idx) => ({
