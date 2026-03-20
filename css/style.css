@@ -1454,11 +1454,19 @@ html, body {
 }
 
 .route-wp-btn.set-start {
-    font-size: 12px;
+    font-size: 10px;
+    padding: 2px 6px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    width: auto;
+    height: auto;
+    color: var(--color-text-secondary);
 }
 
 .route-wp-btn.set-start:hover {
     color: var(--color-accent);
+    border-color: var(--color-accent);
+    background: rgba(56, 189, 248, 0.1);
 }
 
 /* Drag handle */

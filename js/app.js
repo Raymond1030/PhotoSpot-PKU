@@ -532,7 +532,7 @@ function renderRouteWaypointList() {
                 <div class="route-waypoint-area">${p.Area_Name || ''}</div>
             </div>
             <div class="route-waypoint-actions">
-                ${idx > 0 ? `<button class="route-wp-btn set-start" data-index="${idx}" aria-label="设为起点" title="设为起点">⏫</button>` : ''}
+                ${idx > 0 ? `<button class="route-wp-btn set-start" data-index="${idx}" aria-label="设为起点" title="设为起点">置顶</button>` : ''}
                 <button class="route-wp-btn remove" data-key="${w.key}" aria-label="移除">✕</button>
             </div>
         </div>`;
