@@ -723,6 +723,8 @@ function clearRouteMarkers() {
 // ═══════════════════════════════════
 
 function openSpotPicker() {
+    // Expand panel if collapsed so picker header is visible
+    if (routePanelCollapsed) expandRoutePanel();
     spotPicker.classList.remove('hidden');
     spotPickerInput.value = '';
     renderSpotPickerList('');
