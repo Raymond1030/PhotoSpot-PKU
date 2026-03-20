@@ -653,6 +653,7 @@ html, body {
 #bottom-panel.panel-collapsed .route-summary {
     border-top: none;
     padding-top: 0;
+    background: transparent;
 }
 
 #bottom-panel.panel-collapsed .route-summary-actions {
