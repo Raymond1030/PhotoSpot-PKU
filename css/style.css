@@ -1453,6 +1453,49 @@ html, body {
     pointer-events: none;
 }
 
+.route-wp-btn.set-start {
+    font-size: 12px;
+}
+
+.route-wp-btn.set-start:hover {
+    color: var(--color-accent);
+}
+
+/* Drag handle */
+.route-waypoint-drag {
+    color: var(--color-text-muted);
+    font-size: 12px;
+    cursor: grab;
+    padding: 0 2px;
+    user-select: none;
+    letter-spacing: 1px;
+    flex-shrink: 0;
+}
+
+.route-waypoint-drag:active {
+    cursor: grabbing;
+}
+
+/* Drag states */
+.route-waypoint-item.dragging {
+    opacity: 0.3;
+}
+
+.route-waypoint-item.drag-over {
+    border-top: 2px solid var(--color-accent);
+}
+
+.drag-clone {
+    position: fixed;
+    z-index: 9999;
+    background: var(--color-panel-solid);
+    border: 1px solid var(--color-accent);
+    border-radius: var(--radius-sm);
+    opacity: 0.9;
+    pointer-events: none;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
 .route-actions {
     display: flex;
     gap: 8px;
@@ -1612,6 +1655,26 @@ html, body {
     color: var(--color-text-muted);
     padding: 12px 16px 4px;
     letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.spot-picker-add-all {
+    background: none;
+    border: 1px solid var(--color-border);
+    color: var(--color-accent);
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition: all var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.spot-picker-add-all:hover {
+    background: rgba(56, 189, 248, 0.1);
 }
 
 .spot-picker-item {

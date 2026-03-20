@@ -504,6 +504,15 @@ function clearAllWaypoints() {
     updateRouteSummary();
 }
 
+function setAsStart(index) {
+    if (index <= 0 || index >= routeWaypoints.length) return;
+    const item = routeWaypoints.splice(index, 1)[0];
+    routeWaypoints.unshift(item);
+    renderRouteWaypointList();
+    updateRouteMarkers();
+    debouncedRequestMultiRoute();
+}
+
 function renderRouteWaypointList() {
     if (routeWaypoints.length === 0) {
         routeWaypointListEl.innerHTML = '<div class="route-empty-hint">请添加至少2个景点</div>';
@@ -515,28 +524,151 @@ function renderRouteWaypointList() {
 
     routeWaypointListEl.innerHTML = routeWaypoints.map((w, idx) => {
         const p = w.feature.properties;
-        return `<div class="route-waypoint-item" data-key="${w.key}">
+        return `<div class="route-waypoint-item" draggable="true" data-key="${w.key}" data-index="${idx}">
+            <div class="route-waypoint-drag" aria-label="拖拽排序">⋮⋮</div>
             <div class="route-waypoint-num">${idx + 1}</div>
             <div class="route-waypoint-info">
                 <div class="route-waypoint-name">${p.Spot_Name}</div>
                 <div class="route-waypoint-area">${p.Area_Name || ''}</div>
             </div>
             <div class="route-waypoint-actions">
-                <button class="route-wp-btn move-up" data-index="${idx}" ${idx === 0 ? 'disabled' : ''} aria-label="上移">▲</button>
-                <button class="route-wp-btn move-down" data-index="${idx}" ${idx === routeWaypoints.length - 1 ? 'disabled' : ''} aria-label="下移">▼</button>
+                ${idx > 0 ? `<button class="route-wp-btn set-start" data-index="${idx}" aria-label="设为起点" title="设为起点">⏫</button>` : ''}
                 <button class="route-wp-btn remove" data-key="${w.key}" aria-label="移除">✕</button>
             </div>
         </div>`;
     }).join('');
 
-    routeWaypointListEl.querySelectorAll('.move-up').forEach(btn => {
-        btn.addEventListener('click', () => moveWaypoint(parseInt(btn.dataset.index), -1));
+    // Set as start
+    routeWaypointListEl.querySelectorAll('.set-start').forEach(btn => {
+        btn.addEventListener('click', () => setAsStart(parseInt(btn.dataset.index)));
     });
-    routeWaypointListEl.querySelectorAll('.move-down').forEach(btn => {
-        btn.addEventListener('click', () => moveWaypoint(parseInt(btn.dataset.index), 1));
-    });
+    // Remove
     routeWaypointListEl.querySelectorAll('.remove').forEach(btn => {
         btn.addEventListener('click', () => removeWaypoint(btn.dataset.key));
+    });
+
+    // Drag and drop
+    initWaypointDragDrop();
+}
+
+function initWaypointDragDrop() {
+    const items = routeWaypointListEl.querySelectorAll('.route-waypoint-item');
+    let dragIdx = null;
+
+    items.forEach(item => {
+        item.addEventListener('dragstart', (e) => {
+            dragIdx = parseInt(item.dataset.index);
+            item.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            // Needed for Firefox
+            e.dataTransfer.setData('text/plain', '');
+        });
+
+        item.addEventListener('dragend', () => {
+            item.classList.remove('dragging');
+            routeWaypointListEl.querySelectorAll('.route-waypoint-item').forEach(el => el.classList.remove('drag-over'));
+            dragIdx = null;
+        });
+
+        item.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const overIdx = parseInt(item.dataset.index);
+            if (overIdx === dragIdx) return;
+            items.forEach(el => el.classList.remove('drag-over'));
+            item.classList.add('drag-over');
+        });
+
+        item.addEventListener('dragleave', () => {
+            item.classList.remove('drag-over');
+        });
+
+        item.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const dropIdx = parseInt(item.dataset.index);
+            if (dragIdx === null || dragIdx === dropIdx) return;
+            // Reorder
+            const moved = routeWaypoints.splice(dragIdx, 1)[0];
+            routeWaypoints.splice(dropIdx, 0, moved);
+            renderRouteWaypointList();
+            updateRouteMarkers();
+            debouncedRequestMultiRoute();
+        });
+    });
+
+    // Touch drag support
+    let touchDragIdx = null;
+    let touchClone = null;
+    let touchStartY = 0;
+    let longPressTimer = null;
+
+    items.forEach(item => {
+        const dragHandle = item.querySelector('.route-waypoint-drag');
+        if (!dragHandle) return;
+
+        dragHandle.addEventListener('touchstart', (e) => {
+            touchStartY = e.touches[0].clientY;
+            longPressTimer = setTimeout(() => {
+                touchDragIdx = parseInt(item.dataset.index);
+                item.classList.add('dragging');
+                // Create floating clone
+                touchClone = item.cloneNode(true);
+                touchClone.classList.add('drag-clone');
+                touchClone.style.width = item.offsetWidth + 'px';
+                document.body.appendChild(touchClone);
+                touchClone.style.top = (e.touches[0].clientY - 20) + 'px';
+                touchClone.style.left = item.getBoundingClientRect().left + 'px';
+            }, 300);
+        }, { passive: true });
+
+        dragHandle.addEventListener('touchmove', (e) => {
+            if (touchDragIdx === null) {
+                // Cancel long press if moved too much before activation
+                if (Math.abs(e.touches[0].clientY - touchStartY) > 10) {
+                    clearTimeout(longPressTimer);
+                }
+                return;
+            }
+            e.preventDefault();
+            const y = e.touches[0].clientY;
+            if (touchClone) touchClone.style.top = (y - 20) + 'px';
+
+            // Highlight drop target
+            items.forEach(el => el.classList.remove('drag-over'));
+            const overEl = document.elementFromPoint(e.touches[0].clientX, y);
+            const overItem = overEl?.closest('.route-waypoint-item');
+            if (overItem && overItem !== item) overItem.classList.add('drag-over');
+        });
+
+        dragHandle.addEventListener('touchend', (e) => {
+            clearTimeout(longPressTimer);
+            if (touchDragIdx === null) return;
+
+            const y = e.changedTouches[0].clientY;
+            const overEl = document.elementFromPoint(e.changedTouches[0].clientX, y);
+            const overItem = overEl?.closest('.route-waypoint-item');
+            const dropIdx = overItem ? parseInt(overItem.dataset.index) : null;
+
+            if (dropIdx !== null && dropIdx !== touchDragIdx) {
+                const moved = routeWaypoints.splice(touchDragIdx, 1)[0];
+                routeWaypoints.splice(dropIdx, 0, moved);
+                renderRouteWaypointList();
+                updateRouteMarkers();
+                debouncedRequestMultiRoute();
+            } else {
+                items.forEach(el => el.classList.remove('drag-over', 'dragging'));
+            }
+
+            if (touchClone) { touchClone.remove(); touchClone = null; }
+            touchDragIdx = null;
+        });
+
+        dragHandle.addEventListener('touchcancel', () => {
+            clearTimeout(longPressTimer);
+            items.forEach(el => el.classList.remove('drag-over', 'dragging'));
+            if (touchClone) { touchClone.remove(); touchClone = null; }
+            touchDragIdx = null;
+        });
     });
 }
 
@@ -758,7 +890,11 @@ function renderSpotPickerList(query) {
     let html = '';
     Object.entries(areaGroups).forEach(([areaId, group]) => {
         if (group.spots.length === 0) return;
-        html += `<div class="spot-picker-group-header">${group.name}</div>`;
+        const allSelected = group.spots.every(f => isSpotInRoute(f.properties.Area_id + '-' + f.properties.Spot_id));
+        html += `<div class="spot-picker-group-header">
+            <span>${group.name}</span>
+            <button class="spot-picker-add-all" data-area-id="${areaId}">${allSelected ? '全部移除' : '全部添加'}</button>
+        </div>`;
         group.spots.forEach(f => {
             const p = f.properties;
             const key = p.Area_id + '-' + p.Spot_id;
@@ -785,6 +921,27 @@ function renderSpotPickerList(query) {
                 toggleWaypoint(feature);
                 renderSpotPickerList(spotPickerInput.value);
             }
+        });
+    });
+
+    spotPickerList.querySelectorAll('.spot-picker-add-all').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const aId = parseInt(btn.dataset.areaId);
+            const group = areaGroups[aId];
+            if (!group) return;
+            const allSelected = group.spots.every(f => isSpotInRoute(f.properties.Area_id + '-' + f.properties.Spot_id));
+            if (allSelected) {
+                group.spots.forEach(f => {
+                    const key = spotKey(f);
+                    if (isSpotInRoute(key)) removeWaypoint(key);
+                });
+            } else {
+                group.spots.forEach(f => {
+                    if (!isSpotInRoute(spotKey(f))) addWaypoint(f);
+                });
+            }
+            renderSpotPickerList(spotPickerInput.value);
         });
     });
 }
