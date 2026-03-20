@@ -346,6 +346,8 @@ function clearRouteLayer() {
 function enterRoutePlanMode(prefillSpots) {
     routePlanMode = true;
     currentLevel = 4;
+    routePanelCollapsed = false;
+    bottomPanel.classList.remove('panel-collapsed');
     clearRoute();
     routeWaypoints = [];
     routeGeometry = null;
@@ -382,6 +384,8 @@ function enterRoutePlanMode(prefillSpots) {
 
 function exitRoutePlanMode() {
     routePlanMode = false;
+    routePanelCollapsed = false;
+    bottomPanel.classList.remove('panel-collapsed');
     routeWaypoints = [];
     routeGeometry = null;
     routeTotalDistance = 0;
@@ -460,6 +464,33 @@ function moveWaypoint(index, direction) {
     renderRouteWaypointList();
     updateRouteMarkers();
     debouncedRequestMultiRoute();
+}
+
+let routePanelCollapsed = false;
+
+function collapseRoutePanel() {
+    if (routePanelCollapsed) return;
+    routePanelCollapsed = true;
+    bottomPanel.classList.add('panel-collapsed');
+    const collapseBtn = document.getElementById('route-collapse-btn');
+    if (collapseBtn) collapseBtn.textContent = '展开';
+}
+
+function expandRoutePanel() {
+    if (!routePanelCollapsed) return;
+    routePanelCollapsed = false;
+    bottomPanel.classList.remove('panel-collapsed');
+    const collapseBtn = document.getElementById('route-collapse-btn');
+    if (collapseBtn) collapseBtn.textContent = '收起';
+}
+
+function toggleRoutePanel() {
+    if (routePanelCollapsed) {
+        expandRoutePanel();
+    } else {
+        collapseRoutePanel();
+    }
+    updateMapControlsAfterTransition();
 }
 
 function clearAllWaypoints() {
@@ -785,11 +816,23 @@ routeSortBtn?.addEventListener('click', () => {
 });
 routeViewBtn?.addEventListener('click', () => {
     if (!routeGeometry) return;
-    const bounds = new mapboxgl.LngLatBounds();
-    routeWaypoints.forEach(w => bounds.extend(w.feature.geometry.coordinates));
-    map.fitBounds(bounds, { padding: getMapPadding(), maxZoom: DETAIL_ZOOM, duration: 800 });
+    // Collapse panel first so map gets full viewport
+    collapseRoutePanel();
+    setTimeout(() => {
+        const bounds = new mapboxgl.LngLatBounds();
+        routeWaypoints.forEach(w => bounds.extend(w.feature.geometry.coordinates));
+        map.fitBounds(bounds, { padding: { top: 80, left: 60, right: 60, bottom: 60 }, maxZoom: DETAIL_ZOOM, duration: 800 });
+    }, 100);
 });
 routeClearBtn?.addEventListener('click', () => clearAllWaypoints());
+document.getElementById('route-collapse-btn')?.addEventListener('click', toggleRoutePanel);
+// Click on collapsed header expands it
+document.querySelector('.route-plan-header')?.addEventListener('click', (e) => {
+    if (routePanelCollapsed && !e.target.closest('button')) {
+        expandRoutePanel();
+        updateMapControlsAfterTransition();
+    }
+});
 
 spotPickerClose?.addEventListener('click', closeSpotPicker);
 spotPickerInput?.addEventListener('input', (e) => renderSpotPickerList(e.target.value));

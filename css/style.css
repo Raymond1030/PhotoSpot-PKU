@@ -636,6 +636,21 @@ html, body {
     pointer-events: none;
 }
 
+#bottom-panel.panel-collapsed {
+    transform: translateY(calc(100% - 48px));
+}
+
+#bottom-panel.panel-collapsed .route-plan-header {
+    cursor: pointer;
+}
+
+#bottom-panel.panel-collapsed .route-waypoint-list,
+#bottom-panel.panel-collapsed .route-start-indicator,
+#bottom-panel.panel-collapsed .route-actions,
+#bottom-panel.panel-collapsed .route-summary {
+    display: none;
+}
+
 #bottom-panel > .panel-handle { display: none; }
 
 .panel-section { display: none; }
@@ -1285,6 +1300,23 @@ html, body {
     font-size: 12px;
     color: var(--color-text-secondary);
     margin-top: 2px;
+}
+
+.route-collapse-btn {
+    background: none;
+    border: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition: all var(--transition-fast);
+}
+
+.route-collapse-btn:hover {
+    color: var(--color-accent);
+    border-color: var(--color-accent);
 }
 
 .route-clear-btn {
