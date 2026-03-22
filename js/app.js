@@ -8,6 +8,9 @@ const DATA_BASE_URL = location.hostname === 'localhost' || location.hostname ===
     ? './'
     : 'https://raymondstorage-1307420465.cos.ap-beijing.myqcloud.com/';
 
+// ── Cache buster for COS resources (generated once per page load) ──
+const CACHE_VERSION = Date.now();
+
 // ── Mapbox Token (from js/config.js) ──
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
@@ -1098,7 +1101,7 @@ routeShareImage?.addEventListener('click', async () => {
 
 async function loadData() {
     try {
-        const cacheBuster = '?t=' + Date.now();
+        const cacheBuster = '?v=' + CACHE_VERSION;
         const [areaRes, spotRes, manifestRes, metaRes] = await Promise.all([
             fetch(DATA_BASE_URL + 'data/spot_data/PKU_area.json' + cacheBuster),
             fetch(DATA_BASE_URL + 'data/spot_data/PKU_spot.json' + cacheBuster),
@@ -1128,8 +1131,8 @@ function getAreaCover(areaId) {
 // Appends Tencent COS image processing to resize server-side, avoiding loading 24MB originals as thumbnails
 function imgUrl(path, width) {
     const url = DATA_BASE_URL + path;
-    if (!width) return url; // full size for lightbox
-    return url + '?imageMogr2/thumbnail/' + width + 'x/quality/80';
+    if (!width) return url + '?v=' + CACHE_VERSION;
+    return url + '?imageMogr2/thumbnail/' + width + 'x/quality/80&v=' + CACHE_VERSION;
 }
 
 // Clean up verbose lens model names (e.g. "SIGMA 56mm F1.4 DC DN | Contemporary 018" → "SIGMA 56mm F1.4 DC DN")
