@@ -29,6 +29,12 @@ jobs:
           echo "MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }}" > .env
           node scripts/generate_config.js
 
+      - name: Bust cache with build timestamp
+        run: |
+          BUILD_TS=$(date +%s)
+          sed -i "s/style\.css?v=[0-9]*/style.css?v=$BUILD_TS/" index.html
+          sed -i "s/app\.js?v=[0-9]*/app.js?v=$BUILD_TS/" index.html
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
