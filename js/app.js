@@ -3,8 +3,10 @@
    Map-dominant + Area panel + Bottom strips
    =================================== */
 
-// ── Data Base URL (Tencent COS) ──
-const DATA_BASE_URL = 'https://raymondstorage-1307420465.cos.ap-beijing.myqcloud.com/';
+// ── Data Base URL: use local files in dev, Tencent COS in production ──
+const DATA_BASE_URL = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
+    ? './'
+    : 'https://raymondstorage-1307420465.cos.ap-beijing.myqcloud.com/';
 
 // ── Mapbox Token (from js/config.js) ──
 mapboxgl.accessToken = MAPBOX_TOKEN;
@@ -964,6 +966,7 @@ document.getElementById('route-entry-btn')?.addEventListener('click', () => {
     enterRoutePlanMode([]);
 });
 
+
 routeAddBtn?.addEventListener('click', () => openSpotPicker());
 routeSortBtn?.addEventListener('click', () => {
     if (routeWaypoints.length <= 2) return;
@@ -1095,11 +1098,12 @@ routeShareImage?.addEventListener('click', async () => {
 
 async function loadData() {
     try {
+        const cacheBuster = '?t=' + Date.now();
         const [areaRes, spotRes, manifestRes, metaRes] = await Promise.all([
-            fetch(DATA_BASE_URL + 'data/spot_data/PKU_Area.json'),
-            fetch(DATA_BASE_URL + 'data/spot_data/PKU_spot.json'),
-            fetch(DATA_BASE_URL + 'data/image_manifest.json'),
-            fetch(DATA_BASE_URL + 'data/image_metadata.json').catch(() => ({ json: () => ({}) }))
+            fetch(DATA_BASE_URL + 'data/spot_data/PKU_area.json' + cacheBuster),
+            fetch(DATA_BASE_URL + 'data/spot_data/PKU_spot.json' + cacheBuster),
+            fetch(DATA_BASE_URL + 'data/image_manifest.json' + cacheBuster),
+            fetch(DATA_BASE_URL + 'data/image_metadata.json' + cacheBuster).catch(() => ({ json: () => ({}) }))
         ]);
         areaData = await areaRes.json();
         spotData = await spotRes.json();
