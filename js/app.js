@@ -1525,19 +1525,13 @@ function getAreaCategories(areaId) {
     return cats;
 }
 
+// TODO: 人像/风光分类标签，待数据完善后恢复
 function renderCategoryTags(categories) {
-    const tags = [];
-    if (categories.has('风光')) tags.push('<span class="cat-tag cat-landscape">🏔️ 风光</span>');
-    if (categories.has('人像')) tags.push('<span class="cat-tag cat-portrait">🧑 人像</span>');
-    return tags.join('');
+    return '';
 }
 
 function renderSpotCategoryTag(spotFeature) {
-    const cat = spotFeature.properties.Category || '';
-    const tags = [];
-    if (cat.includes('风光')) tags.push('<span class="cat-tag cat-landscape">🏔️ 风光</span>');
-    if (cat.includes('人像')) tags.push('<span class="cat-tag cat-portrait">🧑 人像</span>');
-    return tags.join('');
+    return '';
 }
 
 function initCategoryFilter(containerEl, onChange) {
