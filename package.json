@@ -6,7 +6,7 @@
   "scripts": {
     "sync-photos": "node scripts/generate_manifest.js",
     "gen-config": "node scripts/generate_config.js",
-    "dev": "npm run gen-config && npm run sync-photos && live-server --port=3000 --no-browser",
+    "dev": "npm run gen-config && npm run sync-photos && live-server --port=3000 --no-browser --wait=100",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
