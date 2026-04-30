@@ -13,15 +13,13 @@
     <img src="https://img.shields.io/badge/🌐_在线访问-PhotoSpot_PKU-blue?style=for-the-badge" alt="在线访问">
   </a>
 </p>
-
 <p align="center">
   <img src="https://img.shields.io/github/license/Raymond1030/PhotoSpot-PKU" alt="License">
   <img src="https://img.shields.io/github/stars/Raymond1030/PhotoSpot-PKU?style=social" alt="Stars">
-  <img src="https://img.shields.io/github/forks/Raymond1030/PhotoSpot-PKU?style=social" alt="Forks">
-  <img src="https://img.shields.io/github/last-commit/Raymond1030/PhotoSpot-PKU" alt="Last Commit">
   <img src="https://img.shields.io/github/issues/Raymond1030/PhotoSpot-PKU" alt="Issues">
-  <img src="https://img.shields.io/badge/data-open--source-brightgreen" alt="Data Open Source">
+  <img src="https://img.shields.io/badge/data-open--source-brightgreen" alt="Map Spot-Data Open Source">
 </p>
+
 
 PhotoSpot PKU 是一张为摄影爱好者打造的**北大校园交互地图**
 
