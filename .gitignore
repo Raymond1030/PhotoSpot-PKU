@@ -1,5 +1,7 @@
-# 数据目录（图片通过腾讯云 COS 加载）
-data/
+# 图片数据（通过腾讯云 COS 加载，不开源）
+data/images/
+data/image_manifest.json
+data/image_metadata.json
 
 # 密钥文件
 .env

@@ -1,0 +1,27 @@
+{
+"type": "FeatureCollection",
+"name": "PKU_Area",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "id": 1, "Area_Name": "西门", "Des": "北京大学西门，庄严肃穆的牌楼建筑。适合拍摄经典纪念照。", "Spot_Point": null, "Key_Area": 1 }, "geometry": { "type": "Point", "coordinates": [ 116.298592157105873, 39.993247657328943 ] } },
+{ "type": "Feature", "properties": { "id": 2, "Area_Name": "未名湖", "Des": "未名湖区域，适合打卡博雅塔和未名湖的一塔湖图景色。", "Spot_Point": null, "Key_Area": 1 }, "geometry": { "type": "Point", "coordinates": [ 116.304366976410392, 39.993578829762178 ] } },
+{ "type": "Feature", "properties": { "id": 3, "Area_Name": "华表", "Des": null, "Spot_Point": null, "Key_Area": 0 }, "geometry": { "type": "Point", "coordinates": [ 116.299498515888672, 39.993338351797838 ] } },
+{ "type": "Feature", "properties": { "id": 4, "Area_Name": "校长办公室", "Des": null, "Spot_Point": null, "Key_Area": 0 }, "geometry": { "type": "Point", "coordinates": [ 116.300192662800029, 39.99333018536359 ] } },
+{ "type": "Feature", "properties": { "id": 6, "Area_Name": "燕南园", "Des": null, "Spot_Point": null, "Key_Area": 1 }, "geometry": { "type": "Point", "coordinates": [ 116.302822411079561, 39.988333349906597 ] } },
+{ "type": "Feature", "properties": { "id": 7, "Area_Name": "图书馆", "Des": null, "Spot_Point": null, "Key_Area": 1 }, "geometry": { "type": "Point", "coordinates": [ 116.304488650015287, 39.990614410288622 ] } },
+{ "type": "Feature", "properties": { "id": 8, "Area_Name": "北大东门", "Des": "东门，有石狮子和北大门牌打卡", "Spot_Point": null, "Key_Area": 1 }, "geometry": { "type": "Point", "coordinates": [ 116.309263113056772, 39.990816021953577 ] } },
+{ "type": "Feature", "properties": { "id": 9, "Area_Name": "静园", "Des": null, "Spot_Point": null, "Key_Area": 0 }, "geometry": { "type": "Point", "coordinates": [ 116.302079588184341, 39.990010535118309 ] } },
+{ "type": "Feature", "properties": { "id": 10, "Area_Name": "恬园大草坪", "Des": null, "Spot_Point": null, "Key_Area": 1 }, "geometry": { "type": "Point", "coordinates": [ 116.307648276687473, 39.992221089605572 ] } },
+{ "type": "Feature", "properties": { "id": 11, "Area_Name": "百周年大讲堂", "Des": "百讲", "Spot_Point": null, "Key_Area": 0 }, "geometry": { "type": "Point", "coordinates": [ 116.304692353083482, 39.988389464124417 ] } },
+{ "type": "Feature", "properties": { "id": 12, "Area_Name": "勺海", "Des": null, "Spot_Point": null, "Key_Area": 1 }, "geometry": { "type": "Point", "coordinates": [ 116.298932415993306, 39.991504493945001 ] } },
+{ "type": "Feature", "properties": { "id": 13, "Area_Name": "李兆基人文学苑", "Des": null, "Spot_Point": null, "Key_Area": 0 }, "geometry": { "type": "Point", "coordinates": [ 116.305567294980662, 39.995789373921284 ] } },
+{ "type": "Feature", "properties": { "id": 14, "Area_Name": "李大钊像", "Des": null, "Spot_Point": null, "Key_Area": 0 }, "geometry": { "type": "Point", "coordinates": [ 116.301968637981531, 39.991516189476087 ] } },
+{ "type": "Feature", "properties": { "id": 15, "Area_Name": "南阁", "Des": null, "Spot_Point": null, "Key_Area": 0 }, "geometry": { "type": "Point", "coordinates": [ 116.301473036846147, 39.991593093100541 ] } },
+{ "type": "Feature", "properties": { "id": 5, "Area_Name": "鸣鹤园", "Des": null, "Spot_Point": null, "Key_Area": 1 }, "geometry": { "type": "Point", "coordinates": [ 116.29940279953513, 39.994021027566056 ] } },
+{ "type": "Feature", "properties": { "id": 18, "Area_Name": "敢当石", "Des": "光华楼外面的敢当石头", "Spot_Point": null, "Key_Area": 1 }, "geometry": { "type": "Point", "coordinates": [ 116.305321276037304, 39.98937985521053 ] } },
+{ "type": "Feature", "properties": { "id": 16, "Area_Name": "朗润园", "Des": null, "Spot_Point": null, "Key_Area": 0 }, "geometry": { "type": "Point", "coordinates": [ 116.30456117444696, 39.996618044395873 ] } },
+{ "type": "Feature", "properties": { "id": 17, "Area_Name": "校景亭", "Des": null, "Spot_Point": null, "Key_Area": null }, "geometry": { "type": "Point", "coordinates": [ 116.300515253077705, 39.994971504323125 ] } },
+{ "type": "Feature", "properties": { "id": 19, "Area_Name": "遥感楼", "Des": "彩蛋", "Spot_Point": null, "Key_Area": 0 }, "geometry": { "type": "Point", "coordinates": [ 116.30654708274777, 39.991837035812665 ] } },
+{ "type": "Feature", "properties": { "id": 20, "Area_Name": "历史学系", "Des": null, "Spot_Point": null, "Key_Area": null }, "geometry": { "type": "Point", "coordinates": [ 116.305307775883691, 39.996473304529118 ] } }
+]
+}
