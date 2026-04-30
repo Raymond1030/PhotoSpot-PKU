@@ -8,6 +8,21 @@
   探索燕园
 </p>
 
+<p align="center">
+  <a href="https://raymond1030.github.io/PhotoSpot-PKU/">
+    <img src="https://img.shields.io/badge/🌐_在线访问-PhotoSpot_PKU-blue?style=for-the-badge" alt="在线访问">
+  </a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/github/license/Raymond1030/PhotoSpot-PKU" alt="License">
+  <img src="https://img.shields.io/github/stars/Raymond1030/PhotoSpot-PKU?style=social" alt="Stars">
+  <img src="https://img.shields.io/github/forks/Raymond1030/PhotoSpot-PKU?style=social" alt="Forks">
+  <img src="https://img.shields.io/github/last-commit/Raymond1030/PhotoSpot-PKU" alt="Last Commit">
+  <img src="https://img.shields.io/github/issues/Raymond1030/PhotoSpot-PKU" alt="Issues">
+  <img src="https://img.shields.io/badge/data-open--source-brightgreen" alt="Data Open Source">
+</p>
+
 PhotoSpot PKU 是一张为摄影爱好者打造的**北大校园交互地图**
 
 我们以地图为媒，串联起燕园的每一处诗意光影，助你定格心中最美的北大。
@@ -34,7 +49,7 @@ PhotoSpot PKU 是一张为摄影爱好者打造的**北大校园交互地图**
 - **切换底图样式** — 暗色、街道、卫星三种地图风格，适应不同使用场景
 - **手机也能用** — 响应式设计，手机端以底部抽屉形式浏览，支持手势拖拽
 
-## 快速开始
+## 快速开始本地部署
 
 ```bash
 # 克隆项目
@@ -59,7 +74,7 @@ npm run dev
 
 目前收录了 **19 个摄影区域**（一级点位）和 **42 个具体机位**（二级点位），覆盖燕园主要景观与建筑。
 
-> **点位数据已开源！** `data/spot_data/` 目录下包含所有区域与机位的 GeoJSON 数据，欢迎使用和贡献。照片数据暂不开源，通过腾讯云 COS 加载。
+> **点位数据已开源！** `data/spot_data/` 目录下包含所有区域与机位的 GeoJSON 数据，欢迎使用和贡献。照片数据暂不开源。
 
 ## 参与贡献
 
